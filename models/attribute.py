@@ -90,10 +90,10 @@ class AttributeNoDBParameters(BaseModel):
             elif math.isnan(flattened_dict[key]):
                 flattened_dict[key] = 0
             elif key.startswith("text_errors_by_category."):
-                flattened_dict[key] = int(flattened_dict[key])/self.number_of_characters if flattened_dict[key] is not None else 0
+                flattened_dict[key] = float(flattened_dict[key])/self.number_of_characters if flattened_dict[key] is not None else 0
 
             elif key.startswith("stylometrix_metrics.") and not key.startswith("stylometrix_metrics.statistics."):
-                flattened_dict[key] = int(flattened_dict[key])/self.number_of_characters
+                flattened_dict[key] = float(flattened_dict[key])/self.number_of_characters
 
         if exclude:
             for key in exclude:
