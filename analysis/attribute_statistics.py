@@ -1,5 +1,5 @@
 import pickle
-from typing import List, Tuple, Dict
+from typing import List, Dict
 
 
 class SimpleLanguageStatistics:

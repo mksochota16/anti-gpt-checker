@@ -1,5 +1,4 @@
 import string
-import sys, os
 import re
 import math
 from typing import Dict, List, Union, Optional, Tuple
@@ -9,7 +8,6 @@ import numpy as np
 from collections import defaultdict
 
 import pandas as pd
-from bs4 import BeautifulSoup
 from nltk import pos_tag
 from nltk.tokenize import word_tokenize
 import stylo_metrix as sm
@@ -23,7 +21,6 @@ import pycld2 as cld2
 import cld3
 from textblob import TextBlob
 
-import torch
 
 from analysis.nlp_transformations import replace_links_with_text, remove_stopwords_punctuation_emojis_and_splittings, \
     lemmatize_text, split_into_sentences

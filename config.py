@@ -2,7 +2,6 @@ import os
 
 import nltk
 import spacy
-import torch
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast, AutoTokenizer, AutoModelForCausalLM
@@ -19,11 +18,6 @@ nltk.download('punkt_tab')
 MONGODB_URI = os.getenv("MONGODB_URI")
 MONGODB_PORT = int(os.getenv("MONGODB_PORT"))
 MONGODB_DB_NAME= os.getenv("MONGODB_DB_NAME")
-MONGODB_EMAILS_SRC_COLLECTIONS = {
-    "email_spam_data": os.getenv("MONGODB_COLLECTION_EMAIL_SPAM_DATASET"),
-    "email_spam_assassin": os.getenv("MONGODB_COLLECTION_EMAIL_SPAM_ASSASSIN_DATASET"),
-    "email_class_git": os.getenv("MONGODB_COLLECTION_EMAIL_CLASSIFICATION_GITHUB"),
-}
 
 MONGODB_AUTH_USER = os.getenv("MONGODB_AUTH_USER")
 MONGODB_AUTH_PASS = os.getenv("MONGODB_AUTH_PASS")
@@ -37,10 +31,6 @@ ATTRIBUTES_COLLECTION_NAME = os.getenv("ATTRIBUTES_COLLECTION_NAME", "attributes
 LAB_REPORTS_COLLECTION_NAME = os.getenv("LAB_REPORTS_COLLECTION_NAME", "lab_reports")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-DEFAULT_EMAIL_GENERATION_PROMPT_NAME = os.getenv("DEFAULT_EMAIL_GENERATION_PROMPT_NAME")
-OPENAI_GPT3_5_MODEL_NAME = os.getenv("OPENAI_GPT3_5_MODEL_NAME")
-OPENAI_GPT4_MODEL_NAME = os.getenv("OPENAI_GPT4_MODEL_NAME")
-MAX_API_RETRIES = int(os.getenv("MAX_API_RETRIES"))
 
 SPACY_POLISH_NLP_MODEL = None
 SPACY_ENGLISH_NLP_MODEL = None
@@ -99,7 +89,7 @@ def init_english_perplexity_model(model_name: str = PERPLEXITY_ENGLISH_GPT2_MODE
     global PERPLEXITY_ENGLISH_TOKENIZER
     PERPLEXITY_ENGLISH_TOKENIZER = GPT2TokenizerFast.from_pretrained(model_name)
 
-RELATIVE_PATH_TO_PROJECT = os.getenv("RELATIVE_PATH_TO_PROJECT")
+RELATIVE_PATH_TO_PROJECT = os.getenv("RELATIVE_PATH_TO_PROJECT") # needed for notebooks to work properly
 
 
 

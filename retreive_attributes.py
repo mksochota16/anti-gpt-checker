@@ -1,4 +1,4 @@
-from config import init_polish_perplexity_model, init_spacy_polish_nlp_model, init_language_tool_pl
+from config import init_spacy_polish_nlp_model, init_language_tool_pl
 
 from typing import List
 from tqdm import tqdm
@@ -7,7 +7,7 @@ from dao.lab_report import DAOLabReport
 from dao.attribute import DAOAttributePL
 
 from models.lab_report import LabReportInDB
-from models.attribute import AttributePL, AttributePLInDB
+from models.attribute import AttributePL
 
 from analysis.attribute_retriving import perform_full_analysis
 from analysis.nlp_transformations import remove_report_tags, replace_whitespaces, replace_links_with_text, replace_meaningful_report_tags

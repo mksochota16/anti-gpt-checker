@@ -12,7 +12,8 @@ from services.utils import suppress_stdout
 
 if __name__ == "__main__":
     init_polish_perplexity_model()
-    dao_attributes = DAOAttributePL(collection_name="attributes_hard_tags_replaced")
+    dao_attributes = DAOAttributePL()
+    # select only those attributes that have not been processed yet
     not_processed_perplexity: List[AttributePLInDB] = dao_attributes.find_many_by_query({'perplexity': None})
 
     for attribute_in_db in tqdm(not_processed_perplexity, total=len(not_processed_perplexity),
