@@ -23,8 +23,8 @@ from textblob import TextBlob
 
 
 from analysis.nlp_transformations import replace_links_with_text, remove_stopwords_punctuation_emojis_and_splittings, \
-    lemmatize_text, split_into_sentences
-from models.attribute import AttributePL, AttributeEN, AttributeNoDBParametersPL, AttributeNoDBParametersEN
+    lemmatize_text, split_into_sentences, is_abbreviation
+from models.attribute import AttributeNoDBParametersPL, AttributeNoDBParametersEN
 
 from models.stylometrix_metrics import AllStyloMetrixFeaturesEN, AllStyloMetrixFeaturesPL
 import html2text
@@ -501,24 +501,44 @@ def spelling_and_grammar_check(text: str, lang_code: str) -> Tuple[Dict[str, int
     if lang_code == "pl":
         from config import LANGUAGE_TOOL_PL
         tool = LANGUAGE_TOOL_PL
+        from config import LANGUAGE_TOOL_EN
+        tool_en = LANGUAGE_TOOL_EN
     elif lang_code == "en":
         from config import LANGUAGE_TOOL_EN
         tool = LANGUAGE_TOOL_EN
     else:
         raise ValueError(f"Language {lang_code} is not supported")
+    # Matches sequences of 4+ dots with optional spaces between them.
+    # This is common in listings at the start of a report.
+    text = re.sub(r'(\s)?\.(?:\s*\.){3,}', '', text)
 
     matches = tool.check(text)
     error_categories = {}
 
     # Categorize and count errors
+    number_of_skipped_errors = 0
     for match in matches:
         category = match.category
+        if category == 'TYPOS':
+            error_text = match.matchedText
+            if is_abbreviation(error_text):
+                # ignore this error
+                number_of_skipped_errors += 1
+                continue
+            if lang_code == 'pl': # check if maybe the matched text is in english
+                matches_en = tool_en.check(error_text)
+                if len(matches_en) == 0:
+                    number_of_skipped_errors += 1
+                    continue
+            if len(match.replacements) == 0: # assume that this is a proper noun
+                number_of_skipped_errors += 1
+                continue
         if category in error_categories:
             error_categories[category] += 1
         else:
             error_categories[category] = 1
 
-    return error_categories, len(matches)
+    return error_categories, len(matches) - number_of_skipped_errors
 
 
 def measure_text_features(text: str) -> Dict[str, Optional[int]]:

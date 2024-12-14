@@ -1,4 +1,5 @@
-from config import init_spacy_polish_nlp_model, init_language_tool_pl
+from config import init_polish_perplexity_model, init_spacy_polish_nlp_model, init_language_tool_pl, \
+    init_language_tool_en
 
 from typing import List
 from tqdm import tqdm
@@ -10,13 +11,14 @@ from models.lab_report import LabReportInDB
 from models.attribute import AttributePL
 
 from analysis.attribute_retriving import perform_full_analysis
-from analysis.nlp_transformations import remove_report_tags, replace_whitespaces, replace_links_with_text, replace_meaningful_report_tags
+from analysis.nlp_transformations import preprocess_text
 from services.utils import suppress_stdout
 
 if __name__ == "__main__":
     #init_polish_perplexity_model()
     init_spacy_polish_nlp_model()
     init_language_tool_pl()
+    init_language_tool_en()
     dao_lab_reports = DAOLabReport()
     dao_attributes = DAOAttributePL()
     real_lab_reports: List[LabReportInDB] = dao_lab_reports.find_many_by_query({'is_generated': False})
@@ -30,12 +32,7 @@ if __name__ == "__main__":
 
     for real_lab_report in tqdm(real_lab_reports, total=len(real_lab_reports),
                                 desc=f'Calculating real lab reports statistics', unit='Lab reports', miniters=1):
-        text_to_analyse = replace_meaningful_report_tags(real_lab_report.plaintext_content)
-        text_to_analyse = remove_report_tags(text_to_analyse)
-        text_to_analyse = replace_whitespaces(text_to_analyse)
-        text_to_analyse = replace_links_with_text(text_to_analyse, replacement="")
-        text_to_analyse = text_to_analyse.replace("\n ", " ")
-        text_to_analyse = text_to_analyse.replace("\n", " ")
+        text_to_analyse = preprocess_text(real_lab_report.plaintext_content)
         with suppress_stdout():
             analysis_result = perform_full_analysis(text_to_analyse, 'pl')
         attribute_to_insert = AttributePL(
@@ -51,12 +48,7 @@ if __name__ == "__main__":
     for generated_lab_report in tqdm(generated_lab_reports, total=len(generated_lab_reports),
                                      desc=f'Calculating generated lab reports statistics', unit='Lab reports',
                                      miniters=1):
-        text_to_analyse = replace_meaningful_report_tags(generated_lab_report.plaintext_content)
-        text_to_analyse = remove_report_tags(text_to_analyse)
-        text_to_analyse = replace_whitespaces(text_to_analyse)
-        text_to_analyse = replace_links_with_text(text_to_analyse, replacement="")
-        text_to_analyse = text_to_analyse.replace("\n ", " ")
-        text_to_analyse = text_to_analyse.replace("\n", " ")
+        text_to_analyse = preprocess_text(generated_lab_report.plaintext_content)
         with suppress_stdout():
             analysis_result = perform_full_analysis(text_to_analyse, 'pl')
         attribute_to_insert = AttributePL(

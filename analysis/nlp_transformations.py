@@ -148,3 +148,46 @@ def remove_report_tags(text: str) -> str:
 def replace_whitespaces(text: str) -> str:
     # Replace multiple whitespaces with a single whitespace
     return text.replace('\u200B', " ")
+
+def is_abbreviation(s: str) -> bool:
+    # Optimization: Check if the first character is uppercase
+    if not s or not s[0].isupper():
+        return False
+    # Regex to capture the initial part and optional trailing lowercase part.
+    # Initial part: letters (uppercase/lowercase) and digits
+    # Optional part: '-' followed by 1 to 3 lowercase letters
+    pattern = re.compile(r'^([A-Za-z0-9]+)(?:-([a-z]{1,3}))?$')
+    match = pattern.match(s)
+    if not match:
+        return False
+
+    first_part = s.split('-')[0]
+
+    # Count lowercase letters in the first part
+    lowercase_count = sum(1 for c in first_part if c.islower())
+    length = len(first_part)
+
+    # Apply the lowercase letter rule:
+    # If length > 2, lowercase_count must be < floor(length/2)
+    # If length <= 2, no lowercase letters allowed
+    if length > 2:
+        if lowercase_count >= length / 2:
+            return False
+    else:
+        if lowercase_count > 0:
+            return False
+
+    # If there's a trailing part, it's guaranteed by the regex to be lowercase 1-3 chars
+    # No further checks needed for trailing part.
+
+    return True
+
+def preprocess_text(text: str) -> str:
+    text_to_analyse = replace_meaningful_report_tags(text)
+    text_to_analyse = remove_report_tags(text_to_analyse)
+    text_to_analyse = replace_whitespaces(text_to_analyse)
+    text_to_analyse = replace_links_with_text(text_to_analyse, replacement="")
+    text_to_analyse = text_to_analyse.replace("\n ", " ")
+    text_to_analyse = text_to_analyse.replace("-\n", "")
+    text_to_analyse = text_to_analyse.replace("\n", " ")
+    return text_to_analyse
