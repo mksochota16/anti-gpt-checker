@@ -10,7 +10,7 @@ from dao.attribute import DAOAttributePL
 from models.lab_report import LabReportInDB
 from models.attribute import AttributePL
 
-from analysis.attribute_retriving import perform_full_analysis
+from analysis.attribute_retriving import perform_full_analysis, calculate_perplexity
 from analysis.nlp_transformations import preprocess_text
 from services.utils import suppress_stdout
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
                                 desc=f'Calculating real lab reports statistics', unit='Lab reports', miniters=1):
         text_to_analyse = preprocess_text(real_lab_report.plaintext_content)
         with suppress_stdout():
-            analysis_result = perform_full_analysis(text_to_analyse, 'pl')
+            analysis_result = perform_full_analysis(text_to_analyse, 'pl', False)
         attribute_to_insert = AttributePL(
             referenced_db_name='lab_reports',
             referenced_doc_id=real_lab_report.id,
@@ -50,7 +50,7 @@ if __name__ == "__main__":
                                      miniters=1):
         text_to_analyse = preprocess_text(generated_lab_report.plaintext_content)
         with suppress_stdout():
-            analysis_result = perform_full_analysis(text_to_analyse, 'pl')
+            analysis_result = perform_full_analysis(text_to_analyse, 'pl', False)
         attribute_to_insert = AttributePL(
             referenced_db_name='lab_reports',
             referenced_doc_id=generated_lab_report.id,

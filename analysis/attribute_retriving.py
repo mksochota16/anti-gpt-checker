@@ -556,8 +556,11 @@ def measure_text_features(text: str) -> Dict[str, Optional[int]]:
     return features
 
 
-def perform_full_analysis(text: str, lang_code: str) -> Union[AttributeNoDBParametersPL, AttributeNoDBParametersEN]:
-    perplexity_base, perplexity = None, None #calculate_perplexity(text, lang_code, return_both=True)
+def perform_full_analysis(text: str, lang_code: str, additionally_calculate_perplexity: bool = False) -> Union[AttributeNoDBParametersPL, AttributeNoDBParametersEN]:
+    if additionally_calculate_perplexity:
+        perplexity_base, perplexity = calculate_perplexity(text, lang_code, return_both=True)
+    else:
+        perplexity_base, perplexity = None, None
 
     lem_text, _ = lemmatize_text(text, lang_code)
     lem_text = lem_text.strip()
