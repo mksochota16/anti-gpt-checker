@@ -5,26 +5,8 @@ from datasets import Dataset
 import torch
 from transformers import TrainingArguments, Trainer
 from transformers import AutoTokenizer, AutoModelForMaskedLM
+from transformers import DataCollatorForLanguageModeling
 
-
-dao_attribute: DAOAttributePL = DAOAttributePL(collection_name="attributes-24-12-16-recalc-24-12-22.1-pgryka")
-
-attributes_generated: List[AttributePLInDB] = dao_attribute.find_many_by_query({"is_generated": True})
-attributes_real: List[AttributePLInDB] = dao_attribute.find_many_by_query({"is_generated": False})
-
-dicts_generated = [{"text": attribute.stylometrix_metrics.text, "label": 1} for attribute in attributes_generated]
-dicts_real = [{"text": attribute.stylometrix_metrics.text, "label": 0} for attribute in attributes_real]
-combined = dicts_generated + dicts_real
-dataset_whole = Dataset.from_list(combined)
-split_dataset = dataset_whole.train_test_split(test_size=0.3)
-
-# Extract the train and test subsets
-train_dataset_before_tokenizer = split_dataset["train"]
-test_dataset_before_tokenizer = split_dataset["test"]
-
-model_name = "sdadas/polish-roberta-large-v2"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForMaskedLM.from_pretrained(model_name, num_labels=2)
 
 def tokenize_function(example):
     encoding = tokenizer(
@@ -86,33 +68,6 @@ def tokenize_function_batch(batch):
         "label": all_labels
     }
 
-train_dataset = train_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
-test_dataset = test_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
-
-train_dataset = train_dataset.with_format("torch")
-test_dataset = test_dataset.with_format("torch")
-
-
-from transformers import DataCollatorForLanguageModeling
-
-data_collator = DataCollatorForLanguageModeling(
-    tokenizer=tokenizer,
-    mlm=True,  # MLM stands for masked language modeling
-    mlm_probability=0.15
-)
-
-training_args = TrainingArguments(
-    output_dir="./results",
-    evaluation_strategy="epoch",
-    save_strategy="epoch",
-    logging_steps=50,
-    num_train_epochs=3,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=8,
-    learning_rate=2e-5,
-    load_best_model_at_end=True,
-)
-
 def compute_metrics(eval_pred):
     """Compute accuracy or other metrics after each evaluation."""
     logits, labels = eval_pred
@@ -128,16 +83,66 @@ class CustomTrainer(Trainer):
         return super().compute_loss(model, inputs, return_outputs=return_outputs)
 
 
-trainer = CustomTrainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    data_collator=data_collator,
-    eval_dataset=test_dataset,
-    compute_metrics=compute_metrics,
-)
+if __name__ == "__main__":
+    dao_attribute: DAOAttributePL = DAOAttributePL(collection_name="attributes-24-12-16-recalc-24-12-22.1-pgryka")
 
-trainer.train()
+    attributes_generated: List[AttributePLInDB] = dao_attribute.find_many_by_query({"is_generated": True})
+    attributes_real: List[AttributePLInDB] = dao_attribute.find_many_by_query({"is_generated": False})
 
-results = trainer.evaluate(test_dataset)
-print(results)
+    dicts_generated = [{"text": attribute.stylometrix_metrics.text, "label": 1} for attribute in attributes_generated]
+    dicts_real = [{"text": attribute.stylometrix_metrics.text, "label": 0} for attribute in attributes_real]
+    combined = dicts_generated + dicts_real
+    dataset_whole = Dataset.from_list(combined)
+    split_dataset = dataset_whole.train_test_split(test_size=0.3)
+
+    # Extract the train and test subsets
+    train_dataset_before_tokenizer = split_dataset["train"]
+    test_dataset_before_tokenizer = split_dataset["test"]
+
+    model_name = "sdadas/polish-roberta-large-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForMaskedLM.from_pretrained(model_name, num_labels=2)
+
+
+
+    train_dataset = train_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
+    test_dataset = test_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
+
+    train_dataset = train_dataset.with_format("torch")
+    test_dataset = test_dataset.with_format("torch")
+
+
+
+
+    data_collator = DataCollatorForLanguageModeling(
+        tokenizer=tokenizer,
+        mlm=True,  # MLM stands for masked language modeling
+        mlm_probability=0.15
+    )
+
+    training_args = TrainingArguments(
+        output_dir="./results2",
+        evaluation_strategy="epoch",
+        save_strategy="epoch",
+        logging_steps=50,
+        num_train_epochs=3,
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        learning_rate=2e-5,
+        load_best_model_at_end=True,
+    )
+
+
+    trainer = CustomTrainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset,
+        data_collator=data_collator,
+        eval_dataset=test_dataset,
+        compute_metrics=compute_metrics,
+    )
+
+    trainer.train()
+
+    results = trainer.evaluate(test_dataset)
+    print(results)
