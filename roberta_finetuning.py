@@ -6,6 +6,7 @@ import torch
 from transformers import TrainingArguments, Trainer
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers import DataCollatorForLanguageModeling
+from transformers import AutoModelForSequenceClassification
 
 
 def tokenize_function(example):
@@ -101,7 +102,10 @@ if __name__ == "__main__":
 
     model_name = "sdadas/polish-roberta-large-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForMaskedLM.from_pretrained(model_name, num_labels=2)
+    # For parallel
+    # model = AutoModelForMaskedLM.from_pretrained(model_name, num_labels=2)
+    # For sequential
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
 
 
 
