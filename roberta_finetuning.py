@@ -6,6 +6,7 @@ import torch
 from transformers import TrainingArguments, Trainer
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers import DataCollatorForLanguageModeling
+from transformers import default_data_collator
 from transformers import AutoModelForSequenceClassification
 
 
@@ -102,40 +103,36 @@ if __name__ == "__main__":
 
     model_name = "sdadas/polish-roberta-large-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    # For parallel
-    # model = AutoModelForMaskedLM.from_pretrained(model_name, num_labels=2)
-    # For sequential
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
 
-
-
-    train_dataset = train_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
-    test_dataset = test_dataset_before_tokenizer.map(tokenize_function_batch, batched=True, remove_columns=["text"])
+    train_dataset = train_dataset_before_tokenizer.map(
+        tokenize_function_batch, batched=True, remove_columns=["text"]
+    )
+    test_dataset = test_dataset_before_tokenizer.map(
+        tokenize_function_batch, batched=True, remove_columns=["text"]
+    )
 
     train_dataset = train_dataset.with_format("torch")
     test_dataset = test_dataset.with_format("torch")
 
-
-
-
-    data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer,
-        mlm=True,  # MLM stands for masked language modeling
-        mlm_probability=0.15
-    )
+    # Use the default data collator for sequence classification
+    data_collator = default_data_collator
+    # Alternatively:
+    # from transformers import DataCollatorWithPadding
+    # data_collator = DataCollatorWithPadding(tokenizer)
 
     training_args = TrainingArguments(
-        output_dir="./results2",
+        output_dir="./final_results",
         evaluation_strategy="epoch",
         save_strategy="epoch",
         logging_steps=50,
-        num_train_epochs=3,
+        num_train_epochs=1,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
         learning_rate=2e-5,
         load_best_model_at_end=True,
+        no_cuda=True
     )
-
 
     trainer = CustomTrainer(
         model=model,
