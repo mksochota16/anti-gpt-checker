@@ -31,8 +31,28 @@ if __name__ == "__main__":
         tokenizer=tokenizer
     )
 
-    # Get word attributions
-    word_attributions = cls_explainer(text_to_check)
+    encoding = tokenizer(
+        text_to_check,
+        max_length=512,
+        truncation=True,
+        stride=256,
+        return_overflowing_tokens=True,
+        padding="max_length",
+        return_tensors="pt"
+    )
 
-    # word_attributions is a list of tuples: [(token_1, attribution_score_1), (token_2, ...), ...]
-    print(word_attributions)
+    n_chunks = encoding["input_ids"].shape[0]
+    print(f"Text was split into {n_chunks} chunks.")
+
+    # Process each chunk with the explainer
+    all_chunk_attributions = []
+    for i in range(n_chunks):
+        # Decode the i-th chunk back to text
+        chunk_text = tokenizer.decode(
+            encoding["input_ids"][i],
+            skip_special_tokens=True
+        )
+        print(f"\n--- Attributions for Chunk {i + 1} ---")
+        chunk_attributions = cls_explainer(chunk_text)
+        all_chunk_attributions.append(chunk_attributions)
+        print(chunk_attributions)
