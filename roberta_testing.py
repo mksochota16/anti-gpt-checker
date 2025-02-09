@@ -5,7 +5,6 @@ from models.attribute import AttributePLInDB
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 from transformers_interpret import SequenceClassificationExplainer
 
-
 if __name__ == "__main__":
     try:
         text_id = str(sys.argv[1])
@@ -22,7 +21,8 @@ if __name__ == "__main__":
         print(f"No object found with {text_id} ID")
         exit(1)
     text_to_check = selected_attribute.stylometrix_metrics.text
-    tokenizer = AutoTokenizer.from_pretrained("./final_results")
+    model_name = "sdadas/polish-roberta-large-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForMaskedLM.from_pretrained("./final_results")
 
     # Create the explainer
