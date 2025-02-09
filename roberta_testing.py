@@ -17,7 +17,7 @@ if __name__ == "__main__":
         exit(1)
 
     dao_attribute: DAOAttributePL = DAOAttributePL(collection_name="attributes-24-12-16-recalc-24-12-22.1-pgryka")
-    selected_attribute: AttributePLInDB = dao_attribute.find_by_id({"_id": text_id})
+    selected_attribute: AttributePLInDB = dao_attribute.find_by_id(text_id)
     if selected_attribute is None:
         print(f"No object found with {text_id} ID")
         exit(1)
