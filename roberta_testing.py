@@ -47,25 +47,15 @@ if __name__ == "__main__":
     # Process each chunk with the explainer
     all_chunk_attributions = []
     for i in range(n_chunks):
-        # Decode the i-th chunk (this gives you a text representation of the already-tokenized chunk)
-        chunk_text = tokenizer.decode(encoding["input_ids"][i], skip_special_tokens=True)
-
-        # === IMPORTANT: Re-tokenize with explicit truncation and padding ===
-        # This step ensures that when the explainer tokenizes the text internally, it uses
-        # the same settings as during training. Otherwise, the explainer’s default tokenization
-        # may produce a sequence length (e.g. 523 tokens) that mismatches what the model expects.
-        inputs = tokenizer(
-            chunk_text,
-            max_length=tokenizer.model_max_length,  # or use 512 if that was your training setting
-            truncation=True,
-            padding="max_length",
-            return_tensors="pt"
-        )
-        # Decode back to text so that when the explainer tokenizes it, it yields exactly the same tokens.
-        normalized_chunk_text = tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
+        # Instead of using tokenizer.decode(..., skip_special_tokens=True),
+        # we reconstruct the text from tokens so that the exact tokens (including special tokens)
+        # are preserved.
+        tokens = tokenizer.convert_ids_to_tokens(encoding["input_ids"][i])
+        # Rebuild the string in a way that will yield the same tokens when re-tokenized.
+        chunk_text = tokenizer.convert_tokens_to_string(tokens)
 
         print(f"\n--- Attributions for Chunk {i + 1} ---")
-        # Pass the normalized text to the explainer
-        chunk_attributions = cls_explainer(normalized_chunk_text)
+        # Pass the reconstructed text to the explainer.
+        chunk_attributions = cls_explainer(chunk_text)
         all_chunk_attributions.append(chunk_attributions)
         print(chunk_attributions)
