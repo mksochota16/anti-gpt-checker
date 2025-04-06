@@ -68,7 +68,7 @@ class AttributeNoDBParameters(BaseModel):
     def to_flat_dict(self):
         temp_dict = self.dict(
             exclude={"referenced_db_name", "is_generated", "is_personal", "referenced_doc_id", "language", "id",
-                     "pos_eng_tags", "sentiment_eng", "lemmatized_text", "sample_word_counts"})
+                     "pos_eng_tags", "sentiment_eng", "lemmatized_text", "sample_word_counts", "is_mixed"})
         flattened_dict = self._flatten_dict(temp_dict)
         return flattened_dict
 
@@ -102,7 +102,7 @@ class AttributeNoDBParameters(BaseModel):
         temp_dict = self.dict(
             exclude={"referenced_db_name", "is_generated", "is_personal", "referenced_doc_id", "language", "id",
                      "pos_eng_tags", "sentiment_eng", "punctuation", "lemmatized_text", #"perplexity_base",
-                     "sample_word_counts", "partial_attributes"})
+                     "sample_word_counts", "partial_attributes", "is_mixed"})
         if exclude:
             for key in exclude:
                 if key in temp_dict:
@@ -175,6 +175,7 @@ class AttributeBase(AttributeNoDBParameters):
     language: Optional[str]  # V
     is_generated: Optional[bool]  # V
     is_personal: Optional[bool]  # V
+    is_mixed: Optional[bool]
 
 
 class AttributePL(AttributeBase):
