@@ -177,20 +177,15 @@ async def trigger_document_analysis(document_hash: str, background_tasks: Backgr
             "analysis_id": str(current_analysis_id),
             "place_in_queue": pos}
 
-dao_analysis: DAOAnalysis = DAOAnalysis()
-dao_document: DAODocument = DAODocument()
-dao_attribute: DAOAttributePL = DAOAttributePL(collection_name=API_ATTRIBUTES_COLLECTION_NAME,
+
+dao_async_attribute: DAOAsyncAttributePL = DAOAsyncAttributePL(collection_name=API_ATTRIBUTES_COLLECTION_NAME,
                                                db_name=API_MONGODB_DB_NAME)
 
-async def _perform_analysis(*args, **kwargs):
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _blocking_analysis, *args)
-
-def _blocking_analysis(analysis_id: str, document_hash, user_id: str, type_of_analysis: AnalysisType, document_level_attributes_id: Optional[MongoObjectId]):
-    dao_analysis.update_one({'analysis_id': analysis_id},
+async def _perform_analysis(analysis_id: str, document_hash, user_id: str, type_of_analysis: AnalysisType, document_level_attributes_id: Optional[MongoObjectId]):
+    await dao_async_attribute.update_one({'analysis_id': analysis_id},
                                         {'$set': {'status': AnalysisStatus.RUNNING, 'queue_position': 0}})
 
-    document: DocumentInDB = dao_document.find_one_by_query({'document_hash': document_hash, 'owner_id': user_id})
+    document: DocumentInDB = await dao_async_attribute.find_one_by_query({'document_hash': document_hash, 'owner_id': user_id})
     try:
         text_to_analyse = preprocess_text(document.plaintext_content)
         if type_of_analysis == AnalysisType.DOCUMENT_LEVEL:
@@ -203,24 +198,24 @@ def _blocking_analysis(analysis_id: str, document_hash, user_id: str, type_of_an
                 is_personal=None,
                 **analysis_result.dict()
             )
-            attributes_id = dao_attribute.insert_one(attribute_to_insert)
-            dao_analysis.update_one({'analysis_id': analysis_id},
+            attributes_id = await dao_async_attribute.insert_one(attribute_to_insert)
+            await dao_async_attribute.update_one({'analysis_id': analysis_id},
                                     {'$set': {'status': AnalysisStatus.FINISHED, "attributes_id": attributes_id,
                                                      'task_id': None, 'queue_position': None}})
         elif type_of_analysis == AnalysisType.CHUNK_LEVEL:
             assert document_level_attributes_id is not None, "Document level attributes ID must be provided for chunk level analysis"
-            document_level_attribute_in_db: AttributePLInDB = dao_attribute.find_by_id(document_level_attributes_id)
+            document_level_attribute_in_db: AttributePLInDB = await dao_async_attribute.find_by_id(document_level_attributes_id)
             partial_attributes, combination_features = perform_partial_analysis_independently(document_level_attribute_in_db, text_to_analyse, 'pl')
-            dao_attribute.update_one({'_id': document_level_attributes_id},{"$set":
+            await dao_async_attribute.update_one({'_id': document_level_attributes_id},{"$set":
                                                         {'partial_attributes': [partial_attribute.dict() for partial_attribute in partial_attributes],
                                                          'combination_features': combination_features.dict()}})
-            dao_analysis.update_one({'analysis_id': analysis_id},
+            await dao_async_attribute.update_one({'analysis_id': analysis_id},
                                     {'$set': {'status': AnalysisStatus.FINISHED, "attributes_id": document_level_attributes_id,
                                                      'task_id': None, 'queue_position': None}})
 
 
     except Exception as e:
-        dao_analysis.update_one({'analysis_id': analysis_id}, {'$set':
+        await dao_async_attribute.update_one({'analysis_id': analysis_id}, {'$set':
                                                                    {'status': AnalysisStatus.FAILED,
                                                                     'error_message': traceback.format_exc(),
                                                                     'task_id': None, 'queue_position': None}})
