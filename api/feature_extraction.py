@@ -167,8 +167,7 @@ async def trigger_document_analysis(document_hash: str, background_tasks: Backgr
         )
         await dao_async_analysis.insert_one(analysis)
 
-    task_coro = _perform_analysis(current_analysis_id, document_hash, user_id, type_of_analysis, attributes_id)
-    task_id = await ANALYSIS_TASK_QUEUE.enqueue(task_coro)
+    task_id = await ANALYSIS_TASK_QUEUE.enqueue(_perform_analysis(current_analysis_id, document_hash, user_id, type_of_analysis, attributes_id))
     pos = ANALYSIS_TASK_QUEUE.get_position(task_id)
     await dao_async_analysis.update_one({'analysis_id': current_analysis_id}, {'$set': {'task_id': str(task_id), 'queue_position': pos}})
 
