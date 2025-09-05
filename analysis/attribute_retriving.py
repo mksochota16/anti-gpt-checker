@@ -201,8 +201,8 @@ def calculate_perplexity_old(text: str, language_word_probabilities: Dict[str, f
 
 
 def calculate_perplexity(text: str, language_code: str, per_token: Optional[str] = "word",
-                         return_base_ppl: bool = False, return_both: bool = False,
-                         force_use_cpu: bool = True) -> Union[Optional[float], Tuple[float, float]]:
+                         return_base_ppl: bool = False,  return_both: bool = False,
+                         force_use_cpu: bool = True, use_no_overlap: bool = False) -> Union[Optional[float], Tuple[float, float]]:
     text = replace_links_with_text(text)
     if per_token not in ["word", "char"]:
         raise ValueError("per_token must be either 'word' or 'char'")
@@ -236,7 +236,10 @@ def calculate_perplexity(text: str, language_code: str, per_token: Optional[str]
     model.eval()
 
     max_length = model.config.n_positions
-    encodings = recursively_calculate_encodings(text, tokenizer, max_length)  # tokenizer(text, return_tensors="pt")
+    if use_no_overlap:
+        encodings = recursively_calculate_encodings_no_overlap(text, tokenizer, max_length)
+    else:
+        encodings = recursively_calculate_encodings(text, tokenizer, max_length)
 
     stride = 512
     if isinstance(encodings, dict):
@@ -326,6 +329,27 @@ def recursively_calculate_encodings(text: str, tokenizer, max_length):
 
 
 # https://github.com/AIAnytime/GPT-Shield-AI-Plagiarism-Detector
+def recursively_calculate_encodings_no_overlap(text: str, tokenizer, max_length):
+    encodings = tokenizer(text, return_tensors="pt")
+    if len(encodings.encodings[0].ids) > max_length:
+        # Split text into two halves (no overlap)
+        length = len(text)
+        half = length // 2
+
+        text1 = text[:half]
+        text2 = text[half:]
+
+        encodings1 = recursively_calculate_encodings_no_overlap(text1, tokenizer, max_length)
+        encodings2 = recursively_calculate_encodings_no_overlap(text2, tokenizer, max_length)
+
+        # scal po prostu obie części
+        combined = {}
+        for key in encodings1.keys():
+            combined[key] = torch.cat([encodings1[key], encodings2[key]], dim=1)
+
+        encodings = combined
+
+    return encodings
 
 def calculate_burstiness(lemmatize_text: str, language_code: str) -> float:
     tokens = remove_stopwords_punctuation_emojis_and_splittings(lemmatize_text, language_code)
