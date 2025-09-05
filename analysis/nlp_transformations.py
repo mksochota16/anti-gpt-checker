@@ -10,7 +10,7 @@ from config import RELATIVE_PATH_TO_PROJECT, MINIMAL_SENTENCE_LENGTH, SUSPICIOUS
     MAXIMAL_SENTENCE_LENGTH
 
 
-def lemmatize_text(text: str, lang_code: str) -> Tuple[str, List[str]]:
+def lemmatize_text(text: str, lang_code: str) -> str:
     """
     Lemmatize the text using the appropriate Spacy NLP model
     :param text: text to be lemmatized
@@ -33,7 +33,7 @@ def lemmatize_text(text: str, lang_code: str) -> Tuple[str, List[str]]:
     doc = nlp(text)
     lemma_list = [token.lemma_ for token in doc]
     lemma_text = " ".join(lemma_list)
-    return lemma_text, lemma_list
+    return lemma_text
 
 
 def remove_stopwords_punctuation_emojis_and_splittings(lemmatize_text: str, lang_code: str) -> List[str]:

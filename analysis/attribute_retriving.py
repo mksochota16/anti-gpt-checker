@@ -3,7 +3,7 @@ import re
 import torch
 import math
 from typing import Dict, List, Union, Optional, Tuple
-
+import time
 import nltk
 import numpy as np
 from collections import defaultdict
@@ -274,8 +274,7 @@ def calculate_perplexity(text: str, language_code: str, per_token: Optional[str]
     if prev_end_loc == 0:
         return None
 
-    sum_nll_tensor = torch.tensor(sum_nll)
-
+    sum_nll_tensor = torch.tensor(sum_nll)+1
     if return_base_ppl:
         return float(sum_nll_tensor)
 
@@ -288,7 +287,6 @@ def calculate_perplexity(text: str, language_code: str, per_token: Optional[str]
 
 def recursively_calculate_encodings(text: str, tokenizer, max_length):
     encodings = tokenizer(text, return_tensors="pt")
-
     if len(encodings.encodings[0].ids) > max_length:
         # Split the text into three parts:
         # first half, middle (1/4 to 3/4), second half
@@ -331,7 +329,6 @@ def recursively_calculate_encodings(text: str, tokenizer, max_length):
 
 def calculate_burstiness(lemmatize_text: str, language_code: str) -> float:
     tokens = remove_stopwords_punctuation_emojis_and_splittings(lemmatize_text, language_code)
-
     word_freq = nltk.FreqDist(tokens)
     if len(word_freq) == 0:
         return 1 #default value for burstiness
@@ -377,17 +374,20 @@ def calc_distribution_sentence_length(sentences: List[str]) -> Tuple[
     '''
     Given a list of sentences returns the standard deviation, variance and average of sentence length in terms of both chars and words
     '''
-    lens = []
+
+    char_data = []
+    word_data = []
+
     for sentence in sentences:
         chars = len(sentence)
         if chars < 1:
             continue
-        words = len(sentence.split(' '))
-        lens.append((chars, words))
-    char_data = [x[0] for x in lens]
-    word_data = [x[1] for x in lens]
+        char_data.append(chars)
+        word_data.append(len(sentence.split(' ')))
+
     char_length_distribution: Tuple[float, float, float] = (std(char_data), var(char_data), mean(char_data))
     word_length_distribution: Tuple[float, float, float] = (std(word_data), var(word_data), mean(word_data))
+
     return char_length_distribution, word_length_distribution
 
 
@@ -575,13 +575,10 @@ def count_occurrences(lem_text: str) -> dict:
     the number of occurrences for each word.
     Ignores punctuation (e.g., "test" and "test." are considered "test").
     """
-    # Split the text into words by whitespace
-    words = lem_text.split()
-
     # Dictionary to store occurrences of each word
     occurrences = {}
 
-    for word in words:
+    for word in lem_text.split():
         # Strip leading and trailing punctuation and convert to lowercase
         cleaned_word = word.strip(".,!?;:").lower()
 
@@ -700,16 +697,22 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
     else:
         perplexity_base, perplexity = calculate_perplexity(text, lang_code, return_both=True)
 
-
-    lem_text, _ = lemmatize_text(text, lang_code)
+    lem_text = lemmatize_text(text, lang_code)
     lem_text = lem_text.strip()
+    print("\n--- Original text ---")
+    print(text)
+    print("\n--- Lemmatized text ---")
+    print(lem_text)
     sample_word_counts = count_occurrences(lem_text)
+    print("\n--- Occurrences ---")
+    for word, count in sample_word_counts.items():
+        print(f"{word}: {count}")
     burstiness = calculate_burstiness(lem_text, lang_code)
     burstiness2 = calculate_burstiness_as_in_papers(lem_text, lang_code)
 
     words = [token for token in text.split() if token not in string.punctuation]
     number_of_words = len(words)
-
+    print(f"Number of words: {number_of_words}")
     if perplexity_base is not None:
         perplexity_base_normalized = perplexity_base / number_of_words if number_of_words > 0 else 0
 
@@ -737,11 +740,13 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
     text_features = measure_text_features(text)
     double_spaces = text_features['double_spaces']
     no_space_after_punctuation = text_features['no_space_after_punctuation']
-    emojis = text_features['emojis']
+    emojis = text_features['emojis']   
     question_marks = text_features['question_marks']
     exclamation_marks = text_features['exclamation_marks']
     double_question_marks = text_features['double_question_marks']
     double_exclamation_marks = text_features['double_exclamation_marks']
+
+
     text_errors_by_category, number_of_errors, number_of_abbreviations, number_of_unrecognized_words = spelling_and_grammar_check(
         text, lang_code)
     number_of_unrecognized_words_dict_check = dictionary_check(text)
