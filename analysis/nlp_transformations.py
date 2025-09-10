@@ -10,7 +10,7 @@ from config import RELATIVE_PATH_TO_PROJECT, MINIMAL_SENTENCE_LENGTH, SUSPICIOUS
     MAXIMAL_SENTENCE_LENGTH
 
 
-def lemmatize_text(text: str, lang_code: str) -> Tuple[str, List[str]]:
+def lemmatize_text(text: str, lang_code: str, use_gpu: bool = False) -> str:
     """
     Lemmatize the text using the appropriate Spacy NLP model
     :param text: text to be lemmatized
@@ -29,11 +29,18 @@ def lemmatize_text(text: str, lang_code: str) -> Tuple[str, List[str]]:
         nlp = SPACY_ENGLISH_NLP_MODEL
     else:
         raise ValueError(f"Language {lang_code} is not supported")
+    if use_gpu and torch.cuda.is_available():
+        nlp = nlp.to("cuda")
 
     doc = nlp(text)
     lemma_list = [token.lemma_ for token in doc]
     lemma_text = " ".join(lemma_list)
-    return lemma_text, lemma_list
+    del doc
+    if use_gpu:
+        torch.cuda.empty_cache()
+    gc.collect()
+
+    return lemma_text
 
 
 def remove_stopwords_punctuation_emojis_and_splittings(lemmatize_text: str, lang_code: str) -> List[str]:

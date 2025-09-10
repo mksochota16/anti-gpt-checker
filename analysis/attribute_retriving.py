@@ -768,7 +768,7 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
         perplexity_base, perplexity = calculate_perplexity(text, lang_code, return_both=True)
 
 
-    lem_text, _ = lemmatize_text(text, lang_code)
+    lem_text = lemmatize_text(text, lang_code)
     lem_text = lem_text.strip()
     sample_word_counts = count_occurrences(lem_text)
     burstiness = calculate_burstiness(lem_text, lang_code)
