@@ -202,7 +202,7 @@ def calculate_perplexity_old(text: str, language_word_probabilities: Dict[str, f
 
 def calculate_perplexity(text: str, language_code: str, per_token: Optional[str] = "word",
                          return_base_ppl: bool = False,  return_both: bool = False,
-                         force_use_cpu: bool = True, use_no_overlap: bool = False) -> Union[Optional[float], Tuple[float, float]]:
+                         force_use_cpu: bool = True) -> Union[Optional[float], Tuple[float, float]]:
     text = replace_links_with_text(text)
     if per_token not in ["word", "char"]:
         raise ValueError("per_token must be either 'word' or 'char'")
@@ -231,15 +231,17 @@ def calculate_perplexity(text: str, language_code: str, per_token: Optional[str]
         device = 'cpu'
     else:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        del encodings
+        del input_ids, target_ids, outputs
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
 
     model = model.to(device)
     model.eval()
 
     max_length = model.config.n_positions
-    if use_no_overlap:
-        encodings = recursively_calculate_encodings_no_overlap(text, tokenizer, max_length)
-    else:
-        encodings = recursively_calculate_encodings(text, tokenizer, max_length)
+    encodings = recursively_calculate_encodings(text, tokenizer, max_length)
 
     stride = 512
     if isinstance(encodings, dict):
@@ -268,6 +270,10 @@ def calculate_perplexity(text: str, language_code: str, per_token: Optional[str]
         # Clean up
         del outputs, input_ids, target_ids
         if device == 'cuda':
+            del encodings
+            del input_ids, target_ids, outputs
+            import gc
+            gc.collect()
             torch.cuda.empty_cache()
 
         prev_end_loc = end_loc
@@ -329,28 +335,6 @@ def recursively_calculate_encodings(text: str, tokenizer, max_length):
 
 
 # https://github.com/AIAnytime/GPT-Shield-AI-Plagiarism-Detector
-def recursively_calculate_encodings_no_overlap(text: str, tokenizer, max_length):
-    encodings = tokenizer(text, return_tensors="pt")
-    if len(encodings.encodings[0].ids) > max_length:
-        # Split text into two halves (no overlap)
-        length = len(text)
-        half = length // 2
-
-        text1 = text[:half]
-        text2 = text[half:]
-
-        encodings1 = recursively_calculate_encodings_no_overlap(text1, tokenizer, max_length)
-        encodings2 = recursively_calculate_encodings_no_overlap(text2, tokenizer, max_length)
-
-        # scal po prostu obie części
-        combined = {}
-        for key in encodings1.keys():
-            combined[key] = torch.cat([encodings1[key], encodings2[key]], dim=1)
-
-        encodings = combined
-
-    return encodings
-
 def calculate_burstiness(lemmatize_text: str, language_code: str) -> float:
     tokens = remove_stopwords_punctuation_emojis_and_splittings(lemmatize_text, language_code)
     word_freq = nltk.FreqDist(tokens)
@@ -604,7 +588,7 @@ def count_occurrences(lem_text: str) -> dict:
 
     for word in lem_text.split():
         # Strip leading and trailing punctuation and convert to lowercase
-        cleaned_word = word.strip(".,!?;:").lower()
+        cleaned_word = word.strip(r".,!?;:'\"()[]{}<>-–—/\\|“”‘’…").lower()
 
         if cleaned_word:  # Ensure we don't count empty strings
             occurrences[cleaned_word] = occurrences.get(cleaned_word, 0) + 1
@@ -716,29 +700,9 @@ def perform_parallel_partial_analysis(text_chunks: List[str], lang_code: str,
 def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool = False,
                           skip_stylometrix_calc: bool = False, skip_partial_attributes: bool = False) -> Union[
     AttributeNoDBParametersPL, AttributeNoDBParametersEN]:
-    if skip_perplexity_calc:
-        perplexity_base, perplexity, perplexity_base_normalized = None, None, None
-    else:
-        perplexity_base, perplexity = calculate_perplexity(text, lang_code, return_both=True)
-
-    lem_text = lemmatize_text(text, lang_code)
-    lem_text = lem_text.strip()
-    print("\n--- Original text ---")
-    print(text)
-    print("\n--- Lemmatized text ---")
-    print(lem_text)
-    sample_word_counts = count_occurrences(lem_text)
-    print("\n--- Occurrences ---")
-    for word, count in sample_word_counts.items():
-        print(f"{word}: {count}")
-    burstiness = calculate_burstiness(lem_text, lang_code)
-    burstiness2 = calculate_burstiness_as_in_papers(lem_text, lang_code)
 
     words = [token for token in text.split() if token not in string.punctuation]
     number_of_words = len(words)
-    print(f"Number of words: {number_of_words}")
-    if perplexity_base is not None:
-        perplexity_base_normalized = perplexity_base / number_of_words if number_of_words > 0 else 0
 
     char_data = [len(word) for word in words]
     number_of_characters = len(text)
@@ -746,9 +710,27 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
     standard_deviation_word_char_length = std(char_data)
     variance_word_char_length = var(char_data)
 
+    #perplexit
+    if skip_perplexity_calc:
+        perplexity_base, perplexity, perplexity_base_normalized = None, None, None
+    else:
+        perplexity_base, perplexity = calculate_perplexity(text, lang_code, return_both=True)
+    if perplexity_base is not None:
+        perplexity_base_normalized = perplexity_base / number_of_words if number_of_words > 0 else 0
+
+    lem_text = lemmatize_text(text, lang_code)
+    lem_text = lem_text.strip()
+
+    sample_word_counts = count_occurrences(lem_text)
+
+    burstiness = calculate_burstiness(lem_text, lang_code)
+    burstiness2 = calculate_burstiness_as_in_papers(lem_text, lang_code)
+
     split_sentences: List[str] = split_into_sentences(text, lang_code)
     number_of_sentences = len(split_sentences)
+
     char_length_distribution, word_length_distribution = calc_distribution_sentence_length(split_sentences)
+
     average_sentence_word_length = word_length_distribution[2]
     standard_deviation_sentence_word_length = word_length_distribution[0]
     variance_sentence_word_length = word_length_distribution[1]
@@ -773,7 +755,9 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
 
     text_errors_by_category, number_of_errors, number_of_abbreviations, number_of_unrecognized_words = spelling_and_grammar_check(
         text, lang_code)
+
     number_of_unrecognized_words_dict_check = dictionary_check(text)
+
     if skip_stylometrix_calc:
         stylometrix_metrics = None
     else:
