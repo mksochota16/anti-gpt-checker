@@ -1,10 +1,21 @@
 import stylo_metrix as sm
 import numpy as np
 import pandas as pd
-
+import spacy
+from stylo_metrix.structures import MetricGroup
 
 class CustomStyloMetrix(sm.StyloMetrix):
-
+    def __init__(self, lang="pl", metrics=None, exceptions=None,customization=None):
+        self.lang = lang
+        self._customization = customization
+        self._init_nlp(lang, nlp=None)
+        self._init_metrics(metrics=metrics, exceptions=exceptions, nlp=self.nlp)
+        self._set_pipeline()
+        self._save_path = None
+        self._debug = False
+        self._file_number = 0
+        self.output_name = "stylo_output_"
+        self.debug_name = "stylo_debug_"
     def transform(self, doc, text):
         columns = ["text"]
         m_columns = [m.code for m in self._metrics]

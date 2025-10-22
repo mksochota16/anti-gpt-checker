@@ -22,13 +22,13 @@ import cld3
 from textblob import TextBlob
 
 from concurrent.futures import ThreadPoolExecutor
-
+from analysis.custom_stylometrix import CustomStyloMetrix
 from analysis.nlp_transformations import replace_links_with_text, remove_stopwords_punctuation_emojis_and_splittings, \
     lemmatize_text, split_into_sentences, is_abbreviation, get_text_for_punctuation_analysis
 from models.attribute import AttributeNoDBParametersPL, AttributeNoDBParametersEN, PartialAttribute, PartialAttributeEN, \
     PartialAttributePL, AttributePLInDB, AttributeENInDB
 from models.combination_features import CombinationFeatures
-
+from models.stylometrix_metrics import GrammaticalFormsPL
 from models.stylometrix_metrics import AllStyloMetrixFeaturesEN, AllStyloMetrixFeaturesPL
 import html2text
 
@@ -201,12 +201,71 @@ def binary_split_text(text, stylo, max_tokens):
         token_estimates.insert(i, left_tokens)
 
     return chunks
-
-def stylo_metrix_analysis(text: str, language_code: str) -> AllStyloMetrixFeaturesPL | AllStyloMetrixFeaturesEN:
+def stylo_metrix_analysis(text: str, language_code: str, features: list[str] | None = None) -> AllStyloMetrixFeaturesPL | AllStyloMetrixFeaturesEN:
     from config import STYLOMETRIX_PL_MODEL, STYLOMETRIX_EN_MODEL
 
-    stylo = STYLOMETRIX_PL_MODEL if language_code == "pl" else STYLOMETRIX_EN_MODEL
+    base_stylo_model = STYLOMETRIX_PL_MODEL if language_code == "pl" else STYLOMETRIX_EN_MODEL
+    if features:
+        available_metrics = base_stylo_model._lang.get_metrics()
+        selected_metrics = [m for m in available_metrics if m.code in features]
+        stylo = CustomStyloMetrix(lang=language_code, metrics=selected_metrics)
+    else:
+        stylo = base_stylo_model
+    text_chunks = binary_split_text(text, stylo, MAX_STYLOMETRIX_LENGTH)
+    calculated_metrics = []
 
+    for chunk in text_chunks:
+        doc = stylo.nlp(chunk)
+        metrics = stylo.transform(doc, chunk)
+        calculated_metrics.append(metrics)
+
+    averaged_metrics = {}
+    for metric in calculated_metrics[0].to_dict().keys():
+        if metric == "text":
+            continue
+        metric_values = [metric_dict.to_dict()[metric][0] for metric_dict in calculated_metrics]
+        averaged_metrics[metric] = sum(metric_values) / len(metric_values)
+
+    averaged_metrics["text"] = text
+
+    calculated_metrics = stylo_metrix_output_to_model(averaged_metrics, language_code)
+    return calculated_metrics
+def stylo_metrix_analysis_feature_list(text: str, language_code: str, features: list[str] | None = None) -> AllStyloMetrixFeaturesPL | AllStyloMetrixFeaturesEN:
+    from config import STYLOMETRIX_PL_MODEL, STYLOMETRIX_EN_MODEL
+
+    COMBO_REQUIREMENTS = {
+        "combination.content_function_ratio": [
+            "stylometrix.lexical.L_CONT_A",
+            "stylometrix.lexical.L_FUNC_A",
+        ],
+        "combination.common_long_word_ratio": [
+            "stylometrix.lexical.L_TCCT1",
+            "stylometrix.lexical.L_SYL_G4",
+        ],
+        "combination.common_rare_word_ratio": [
+            "stylometrix.lexical.L_TCCT1",
+            "stylometrix.lexical.L_TCCT5",
+        ],
+        "combination.active_passive_voice_ratio": [
+            "stylometrix.inflection.IN_V_ACT",
+            "stylometrix.inflection.IN_V_PASS",
+        ],
+    }
+
+    if features:
+        expanded = set(features)
+        for feat in features:
+            if feat in COMBO_REQUIREMENTS:
+                expanded.update(COMBO_REQUIREMENTS[feat])
+        features = list(expanded)
+
+    base_stylo_model = STYLOMETRIX_PL_MODEL if language_code == "pl" else STYLOMETRIX_EN_MODEL
+    if features:
+        available_metrics = base_stylo_model._lang.get_metrics()
+        selected_metrics = [m for m in available_metrics if m.code in features]
+        stylo = CustomStyloMetrix(lang=language_code, metrics=selected_metrics)
+    else:
+        stylo = base_stylo_model
     text_chunks = binary_split_text(text, stylo, MAX_STYLOMETRIX_LENGTH)
     calculated_metrics = []
 
@@ -706,6 +765,9 @@ def split_text_into_chunks(split_sentences: List[str], chunk_word_count: int = 2
     return [" ".join(chunk) for chunk in chunks]
 
 
+
+
+
 def perform_partial_analysis(text_chunks: List[str], lang_code: str, skip_perplexity_calc: bool = True,
                              skip_stylometrix_calc: bool = False) -> List[PartialAttribute]:
     if len(text_chunks) < 2:
@@ -725,6 +787,25 @@ def perform_partial_analysis(text_chunks: List[str], lang_code: str, skip_perple
             raise ValueError(f"Language {lang_code} is not supported")
 
     return partial_attributes
+
+def partial_analysis_on_features_list(text_chunks: List[str], lang_code: str, features_to_calculate:List[str]) -> List[PartialAttribute]:
+    if len(text_chunks) < 2:
+        return []
+
+    partial_attributes = []
+    for index, text_chunk in enumerate(text_chunks):
+        full_analysis_results = full_analysis_on_features_list(text_chunk, lang_code,features_to_calculate=features_to_calculate,skip_partial_attributes=True)
+        if lang_code == "en":
+            partial_attributes.append(
+                PartialAttributeEN(index=index, partial_text=text_chunk, attribute=full_analysis_results))
+        elif lang_code == "pl":
+            partial_attributes.append(
+                PartialAttributePL(index=index, partial_text=text_chunk, attribute=full_analysis_results))
+        else:
+            raise ValueError(f"Language {lang_code} is not supported")
+
+    return partial_attributes
+
 
 
 def _analyze_single_chunk(args: Tuple[int, str, str, bool, bool]) -> Union[PartialAttributeEN, PartialAttributePL]:
@@ -918,6 +999,311 @@ def perform_full_analysis(text: str, lang_code: str, skip_perplexity_calc: bool 
         return temp_attribute
 
 
+def full_analysis_on_features_list(text: str, lang_code: str, features_to_calculate:List[str],skip_partial_attributes: bool = False) -> Union[
+    AttributeNoDBParametersPL, AttributeNoDBParametersEN]:
+    def should_calc(name: str) -> bool:
+        return features_to_calculate is None or name in features_to_calculate
+
+    def get_subfeatures(prefix: str) -> list[str]:
+        if features_to_calculate is None:
+            return []
+        return [f.split('.', 1)[1] for f in features_to_calculate if f.startswith(prefix + ".")]
+
+    if len(text.strip()) < 20: # the document is too short, there is no point in analyzing it
+        raise ValueError("Text too short to analyse")
+
+    # stylometrix
+    if (should_calc("stylometrix") or any(f.startswith("stylometrix.") for f in (features_to_calculate or [])) or any(f.startswith("combination.") for f in (features_to_calculate or []))):
+        subfeatures = get_subfeatures("stylometrix")
+        stylometrix_metrics = stylo_metrix_analysis_feature_list(text, lang_code, features=subfeatures or None)
+    else:
+        stylometrix_metrics = None
+
+
+    #number_of_words
+    number_of_words = None
+    if should_calc("number_of_words"):
+        words = [token for token in text.split() if token not in string.punctuation]
+        number_of_words = len(words)
+
+    #number_of_sentences
+    number_of_sentences = None
+    if should_calc("number_of_sentences"):
+        split_sentences: List[str] = split_into_sentences(text, lang_code)
+        number_of_sentences = len(split_sentences)
+
+    #number_of_charcters
+    number_of_characters = None
+    if should_calc("number_of_characters"):
+        number_of_characters = len(text)
+
+    # perplexity
+    perplexity, perplexity_base, perplexity_base_normalized=None,None,None
+    calc_ppl = should_calc("perplexity")
+    calc_base = should_calc("perplexity_base")
+    calc_norm = should_calc("perplexity_base_normalized")
+    if calc_ppl or calc_base or calc_norm:
+        if calc_ppl and calc_base:
+            perplexity_base, perplexity = calculate_perplexity(
+                text, lang_code, return_both=True
+            )
+
+        elif calc_ppl:
+            perplexity = calculate_perplexity(text, lang_code)
+
+        elif calc_base:
+            perplexity_base = calculate_perplexity(
+                text, lang_code, return_base_ppl=True
+            )
+
+        if calc_norm:
+            if perplexity_base is None and not calc_base:
+                perplexity_base = calculate_perplexity(
+                    text, lang_code, return_base_ppl=True
+                )
+            if number_of_words==None:
+                words = [token for token in text.split() if token not in string.punctuation]
+                number_of_words = len(words)
+            perplexity_base_normalized = (perplexity_base / number_of_words if number_of_words > 0 else 0)
+
+    # word occurrences count
+    if should_calc("sample_word_counts"):
+        lem_text, _ = lemmatize_text(text, lang_code)
+        lem_text = lem_text.strip()
+        sample_word_counts = count_occurrences(lem_text)
+    else:
+        sample_word_counts = None
+        lem_text = None
+
+    #burstiness
+    if should_calc("burstiness"):
+        if lem_text is None:
+            lem_text, _ = lemmatize_text(text, lang_code)
+            lem_text = lem_text.strip()
+        burstiness = calculate_burstiness(lem_text, lang_code)
+    else:
+        burstiness=None
+
+    # burstiness2
+    if should_calc("burstiness2"):
+        if lem_text is None:
+            lem_text, _ = lemmatize_text(text, lang_code)
+            lem_text = lem_text.strip()
+        burstiness2 = calculate_burstiness_as_in_papers(lem_text, lang_code)
+    else:
+        burstiness2=None
+        lem_text = None
+
+    #word av, dev and var
+    average_word_char_length,standard_deviation_word_char_length, variance_word_char_length=None, None, None
+    calc_word_av = should_calc("average_word_char_length")
+    calc_word_dev = should_calc("standard_deviation_word_char_length")
+    calc_word_var = should_calc("variance_word_char_length")
+    if calc_word_av or calc_word_dev or calc_word_var:
+        if number_of_words==None:
+            words = [token for token in text.split() if token not in string.punctuation]
+            number_of_words = len(words)
+            char_data = [len(word) for word in words]
+        if calc_word_av:
+            average_word_char_length = sum(char_data) / len(char_data) if len(char_data) else 0
+        if calc_word_dev:
+            standard_deviation_word_char_length = std(char_data)
+        if calc_word_var:
+            variance_word_char_length = var(char_data)
+
+    #sentence metrics
+    sentence_features = [
+        "average_sentence_word_length",
+        "standard_deviation_sentence_word_length",
+        "variance_sentence_word_length",
+        "average_sentence_char_length",
+        "standard_deviation_sentence_char_length",
+        "variance_sentence_char_length"
+    ]
+    if any(should_calc(f) for f in sentence_features):
+        split_sentences: List[str] = split_into_sentences(text, lang_code)
+        number_of_sentences = len(split_sentences)
+
+        char_length_distribution, word_length_distribution = calc_distribution_sentence_length(split_sentences)
+
+        if should_calc("average_sentence_word_length"):
+            average_sentence_word_length = word_length_distribution[2]
+        if should_calc("standard_deviation_sentence_word_length"):
+            standard_deviation_sentence_word_length = word_length_distribution[0]
+        if should_calc("variance_sentence_word_length"):
+            variance_sentence_word_length = word_length_distribution[1]
+        if should_calc("average_sentence_char_length"):
+            average_sentence_char_length = char_length_distribution[2]
+        if should_calc("standard_deviation_sentence_char_length"):
+            standard_deviation_sentence_char_length = char_length_distribution[0]
+        if should_calc("variance_sentence_char_length"):
+            variance_sentence_char_length = char_length_distribution[1]
+    else:
+        average_sentence_word_length = standard_deviation_sentence_word_length = variance_sentence_word_length = None
+        average_sentence_char_length = standard_deviation_sentence_char_length = variance_sentence_char_length = None
+
+    # punctuation metrics
+    calc_punct = should_calc("punctuation")
+    calc_punct_per_sentence = should_calc("punctuation_per_sentence")
+    calc_punct_den = should_calc("punctuation_density")
+    punctuation, punctuation_per_sentence, punctuation_density= None, None, None
+    if calc_punct or calc_punct_per_sentence or calc_punct_den:
+        text_for_punctuation_analysis = get_text_for_punctuation_analysis(text)
+        punctuation = len([char for char in text_for_punctuation_analysis if char in ".,!?;:"])
+        if calc_punct_per_sentence:
+            punctuation_per_sentence = punctuation / number_of_sentences
+        if calc_punct_den:
+            punctuation_density = punctuation / len(text_for_punctuation_analysis)
+        if not calc_punct:
+            punctuation=None
+
+    # measure_text_features_metrics
+    double_spaces, no_space_after_punctuation, emojis, question_marks, exclamation_marks, double_question_marks, double_exclamation_marks = None, None, None, None, None, None, None
+    calc_double_spaces = should_calc("double_spaces")
+    calc_no_space_after_punctuation = should_calc("no_space_after_punctuation")
+    calc_emojis = should_calc("emojis")
+    calc_question_marks = should_calc("question_marks")
+    calc_exclamation_marks = should_calc("exclamation_marks")
+    calc_double_question_marks = should_calc("double_question_marks")
+    calc_double_exclamation_marks = should_calc("double_exclamation_marks")
+    if calc_double_spaces:
+            double_spaces = len(re.findall(r'\s{2,}', text))
+    if calc_no_space_after_punctuation:
+        no_space_after_punctuation = len(re.findall(r'[,.:;!?](?=[^\s])', text))
+    if calc_emojis:
+        emojis=len(re.findall(
+                r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002702-\U000027B0\U000024C2-\U0001F251]',
+                text))
+    if calc_question_marks:
+        question_marks = len(re.findall(r'\?', text))
+    if calc_exclamation_marks:
+        exclamation_marks = len(re.findall(r'!', text))
+    if calc_double_question_marks:
+        double_question_marks = len(re.findall(r'\?\?', text))
+    if calc_double_exclamation_marks:
+            double_exclamation_marks= len(re.findall(r'!!', text))
+
+    #error metrics
+    error_metrics = [
+        "text_errors_by_category",
+        "number_of_errors",
+        "number_of_abbreviations",
+        "number_of_unrecognized_words"
+    ]
+    text_errors_by_category, number_of_errors, number_of_abbreviations, number_of_unrecognized_words = None, None, None, None
+    if any(should_calc(f) for f in error_metrics):
+        text_errors_by_category, number_of_errors, number_of_abbreviations, number_of_unrecognized_words = spelling_and_grammar_check(
+        text, lang_code)
+
+    #dict_check
+    if should_calc("number_of_unrecognized_words_dict_check"):
+        number_of_unrecognized_words_dict_check = dictionary_check(text)
+    else:
+        number_of_unrecognized_words_dict_check = None
+
+    if skip_partial_attributes:
+        partial_attributes = None
+    else:
+        text_chunks = split_text_into_chunks(split_sentences)
+        partial_attributes = perform_partial_analysis(text_chunks, lang_code, skip_perplexity_calc,
+                                                      skip_stylometrix_calc)
+
+
+    if lang_code == "en":
+        pos_eng_tags = count_pos_tags_eng(text)
+        sentiment_eng = sentiment_score_eng(text)
+        temp_attribute = AttributeNoDBParametersEN(perplexity=perplexity, perplexity_base=perplexity_base,
+                                         perplexity_base_normalized=perplexity_base_normalized,
+                                         sample_word_counts=sample_word_counts,
+                                         burstiness=burstiness, burstiness2=burstiness2,
+                                         average_sentence_word_length=average_sentence_word_length,
+                                         standard_deviation_sentence_word_length=standard_deviation_sentence_word_length,
+                                         variance_sentence_word_length=variance_sentence_word_length,
+                                         standard_deviation_sentence_char_length=standard_deviation_sentence_char_length,
+                                         variance_sentence_char_length=variance_sentence_char_length,
+                                         average_sentence_char_length=average_sentence_char_length,
+                                         standard_deviation_word_char_length=standard_deviation_word_char_length,
+                                         variance_word_char_length=variance_word_char_length,
+                                         average_word_char_length=average_word_char_length,
+                                         punctuation=punctuation, punctuation_per_sentence=punctuation_per_sentence,
+                                         punctuation_density=punctuation_density,
+                                         number_of_sentences=number_of_sentences,
+                                         number_of_words=number_of_words, number_of_characters=number_of_characters,
+                                         double_spaces=double_spaces,
+                                         no_space_after_punctuation=no_space_after_punctuation,
+                                         emojis=emojis, question_marks=question_marks,
+                                         exclamation_marks=exclamation_marks,
+                                         double_question_marks=double_question_marks,
+                                         double_exclamation_marks=double_exclamation_marks,
+                                         text_errors_by_category=text_errors_by_category,
+                                         number_of_errors=number_of_errors,
+                                         lemmatized_text=lem_text, pos_eng_tags=pos_eng_tags,
+                                         sentiment_eng=sentiment_eng,
+                                         number_of_unrecognized_words_lang_tool=number_of_unrecognized_words,
+                                         number_of_abbreviations_lang_tool=number_of_abbreviations,
+                                         number_of_unrecognized_words_dict_check=number_of_unrecognized_words_dict_check,
+                                         stylometrix_metrics=stylometrix_metrics.dict() if stylometrix_metrics is not None else None,
+                                         combination_features=None,
+                                         partial_attributes=partial_attributes)
+
+    elif lang_code == "pl":
+        pos_eng_tags = None
+        sentiment_eng = None
+        temp_attribute = AttributeNoDBParametersPL(perplexity=perplexity, perplexity_base=perplexity_base,
+                                         perplexity_base_normalized=perplexity_base_normalized,
+                                         sample_word_counts=sample_word_counts,
+                                         burstiness=burstiness, burstiness2=burstiness2,
+                                         average_sentence_word_length=average_sentence_word_length,
+                                         standard_deviation_sentence_word_length=standard_deviation_sentence_word_length,
+                                         variance_sentence_word_length=variance_sentence_word_length,
+                                         standard_deviation_sentence_char_length=standard_deviation_sentence_char_length,
+                                         variance_sentence_char_length=variance_sentence_char_length,
+                                         average_sentence_char_length=average_sentence_char_length,
+                                         standard_deviation_word_char_length=standard_deviation_word_char_length,
+                                         variance_word_char_length=variance_word_char_length,
+                                         average_word_char_length=average_word_char_length,
+                                         punctuation=punctuation, punctuation_per_sentence=punctuation_per_sentence,
+                                         punctuation_density=punctuation_density,
+                                         number_of_sentences=number_of_sentences,
+                                         number_of_words=number_of_words, number_of_characters=number_of_characters,
+                                         double_spaces=double_spaces,
+                                         no_space_after_punctuation=no_space_after_punctuation,
+                                         emojis=emojis, question_marks=question_marks,
+                                         exclamation_marks=exclamation_marks,
+                                         double_question_marks=double_question_marks,
+                                         double_exclamation_marks=double_exclamation_marks,
+                                         text_errors_by_category=text_errors_by_category,
+                                         number_of_errors=number_of_errors,
+                                         lemmatized_text=lem_text, pos_eng_tags=pos_eng_tags,
+                                         sentiment_eng=sentiment_eng,
+                                         number_of_unrecognized_words_lang_tool=number_of_unrecognized_words,
+                                         number_of_abbreviations_lang_tool=number_of_abbreviations,
+                                         number_of_unrecognized_words_dict_check=number_of_unrecognized_words_dict_check,
+                                         stylometrix_metrics=stylometrix_metrics.dict() if stylometrix_metrics is not None else None,
+                                         combination_features=None,
+                                         partial_attributes=partial_attributes)
+
+
+    else:
+        raise ValueError(f"Language {lang_code} is not supported")
+
+    if skip_partial_attributes or len(partial_attributes) == 0:
+        combination_features = CombinationFeatures.init_from_stylometrix_and_partial_attributes(
+            stylometrix_metrics,
+            [temp_attribute.dict()],
+            features_to_calculate
+        )
+    else:
+        partial_attributes_values_dicts: list[dict] = \
+            [partial_attribute.attribute.dict() for partial_attribute in partial_attributes]
+        combination_features = CombinationFeatures.init_from_stylometrix_and_partial_attributes(
+            stylometrix_metrics,
+            partial_attributes_values_dicts,
+            features_to_calculate
+        )
+
+    temp_attribute.combination_features = combination_features
+    return temp_attribute
 def perform_partial_analysis_independently(document_level_attribute: Union[AttributePLInDB, AttributeENInDB],
                                            text: str, lang_code: str, skip_perplexity_calc: bool = False, skip_stylometrix_calc: bool = False) -> Tuple[List[PartialAttribute], CombinationFeatures]:
     split_sentences: List[str] = split_into_sentences(text, lang_code)
@@ -933,3 +1319,17 @@ def perform_partial_analysis_independently(document_level_attribute: Union[Attri
                                                                                                 partial_attributes_values_dicts)
     return partial_attributes, combination_features
 
+def perform_partial_analysis_independently_on_features_list(document_level_attribute: Union[AttributePLInDB, AttributeENInDB],
+                                           text: str, lang_code: str, features_to_calculate:List[str]) -> Tuple[List[PartialAttribute], CombinationFeatures]:
+    split_sentences: List[str] = split_into_sentences(text, lang_code)
+    text_chunks = split_text_into_chunks(split_sentences)
+    partial_attributes = partial_analysis_on_features_list(text_chunks, lang_code, features_to_calculate)
+    if len(partial_attributes) == 0:
+        combination_features = CombinationFeatures.init_from_stylometrix_and_partial_attributes(document_level_attribute.stylometrix_metrics,
+                                                                                                [document_level_attribute.dict()])
+    else:
+        partial_attributes_values_dicts: list[dict] = \
+            [partial_attribute.attribute.dict() for partial_attribute in partial_attributes]
+        combination_features = CombinationFeatures.init_from_stylometrix_and_partial_attributes(document_level_attribute.stylometrix_metrics,
+                                                                                                partial_attributes_values_dicts)
+    return partial_attributes, combination_features
