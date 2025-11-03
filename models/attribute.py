@@ -102,7 +102,7 @@ class AttributeNoDBParameters(BaseModel):
         temp_dict = self.dict(
             exclude={"referenced_db_name", "is_generated", "is_personal", "referenced_doc_id", "language", "id",
                      "pos_eng_tags", "sentiment_eng", "punctuation", "lemmatized_text", #"perplexity_base",
-                     "sample_word_counts", "partial_attributes"})
+                     "sample_word_counts", "partial_attributes", "llm_model_name"})
         if exclude:
             for key in exclude:
                 if key in temp_dict:
