@@ -10,6 +10,71 @@ from config import RELATIVE_PATH_TO_PROJECT, MINIMAL_SENTENCE_LENGTH, SUSPICIOUS
     MAXIMAL_SENTENCE_LENGTH
 
 
+def build_default_charset() -> set[str]:
+    """
+    Returns a set of characters allowed in LaTeX-friendly Polish text.
+    Includes:
+      - Polish alphabet (lowercase + uppercase)
+      - Digits
+      - Common ASCII letters
+      - Whitespace
+      - Common punctuation
+      - LaTeX-friendly symbols (m-dash, n-dash, tilde, caret, etc.)
+    """
+    polish_lower = "ąćęłńóśźż"
+    polish_upper = polish_lower.upper()
+    ascii_letters = string.ascii_letters
+    digits = string.digits
+    whitespace = string.whitespace
+    # Common punctuation and LaTeX-safe symbols
+    punctuation = (
+        ".,;:!?\"'()[]{}<>/\\|@#$%^&*_+=-~`–—―„”"
+    )
+    itemize_chars = "*-•\u2022\u2013\u2014"
+    return set(polish_lower + polish_upper + ascii_letters + digits + whitespace + punctuation + itemize_chars)
+
+
+POLISH_CHARSET = build_default_charset()
+
+def filter_text(text: str) -> str:
+    """
+    Filters text to only include characters from charset.
+    For each character not in charset:
+      - If there is a space before or after, delete the character
+        and leave one space.
+      - If there is no space before or after, replace the character with one space.
+    Consecutive spaces are collapsed.
+    """
+    out_chars = []
+    indexes_to_remove = []
+    n = len(text)
+
+    for i, ch in enumerate(text):
+        if ch in POLISH_CHARSET:
+            out_chars.append(ch)
+        else:
+            # Check if there's a space before or after the invalid character
+            left_space = (i > 0 and text[i - 1] == " ")
+            right_space = (i + 1 < n and text[i + 1] == " ") or (i + 1 < n and text[i + 1] not in POLISH_CHARSET)
+
+            # If there's a space on either side, just skip this character
+            # (the existing space will be kept)
+            if not (left_space or right_space):
+                # No adjacent space, so replace with a space
+                out_chars.append(" ")
+            if left_space and right_space:
+                indexes_to_remove.append(len(out_chars))
+
+    # Collapse consecutive spaces
+    result = []
+    for i, ch in enumerate(out_chars):
+        if i in indexes_to_remove:
+            continue
+        else:
+            result.append(ch)
+
+    return "".join(result)
+
 def lemmatize_text(text: str, lang_code: str) -> Tuple[str, List[str]]:
     """
     Lemmatize the text using the appropriate Spacy NLP model
@@ -121,18 +186,51 @@ def replace_links_with_text(text: str, replacement: str="LINK") -> str:
     replaced_text = re.sub(url_pattern, replacement, text)
     return replaced_text
 
-def replace_IP_addresses_with_text(text: str, replacement: str="ADRES INTERNETOWY") -> str:
-    ip_subnet_pattern = re.compile(
-        r'^'
-        r'(25[0-5]|2[0-4]\d|[01]?\d?\d)\.'  # 1st octet
-        r'(25[0-5]|2[0-4]\d|[01]?\d?\d)\.'  # 2nd octet
-        r'(25[0-5]|2[0-4]\d|[01]?\d?\d)\.'  # 3rd octet
-        r'(25[0-5]|2[0-4]\d|[01]?\d?\d)'  # 4th octet
-        r'(?:/(3[0-2]|[12]\d|[1-9]|0))?'  # Optional /CIDR (0–32)
-        r'$'
-    )
-    replaced_text = re.sub(ip_subnet_pattern, replacement, text)
-    return replaced_text
+
+def replace_IP_addresses_with_text(text: str, replacement: str = "ADRES INTERNETOWY") -> str:
+    """
+    Replace all IPv4, IPv6, and MAC addresses in text with a replacement string.
+    Works across newlines and anywhere in the text.
+
+    Args:
+        text: Input text containing addresses
+        replacement: String to replace addresses with (default: "ADRES INTERNETOWY")
+
+    Returns:
+        Text with all addresses replaced
+    """
+
+    # IPv4 pattern (with optional CIDR notation)
+    # Matches standard IPv4 addresses like 192.168.1.1 or 10.0.0.0/24
+    ipv4_pattern = r'\b(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)(?:/(?:3[0-2]|[12]?\d))?\b'
+
+    # IPv6 pattern (with optional CIDR notation /0-128)
+    # Matches full and compressed IPv6 addresses
+    ipv6_pattern = r'(?:\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,7}:\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,5}(?::[0-9a-fA-F]{1,4}){1,2}\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,4}(?::[0-9a-fA-F]{1,4}){1,3}\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,3}(?::[0-9a-fA-F]{1,4}){1,4}\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,2}(?::[0-9a-fA-F]{1,4}){1,5}\b|' \
+                   r'\b[0-9a-fA-F]{1,4}:(?:(?::[0-9a-fA-F]{1,4}){1,6})\b|' \
+                   r'\b:(?:(?::[0-9a-fA-F]{1,4}){1,7}|:)\b|' \
+                   r'\bfe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}\b|' \
+                   r'\b::(?:ffff(?::0{1,4}){0,1}:){0,1}(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\b|' \
+                   r'\b(?:[0-9a-fA-F]{1,4}:){1,4}:(?:(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(?:25[0-5]|(?:2[0-4]|1{0,1}[0-9]){0,1}[0-9])\b)' \
+                   r'(?:/(?:12[0-8]|1[01][0-9]|[1-9]?[0-9]))?'  # Optional CIDR /0-128
+
+    # MAC address pattern
+    mac_pattern = r'\b(?:[0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}\b|' \
+                  r'\b(?:[0-9a-fA-F]{4}\.){2}[0-9a-fA-F]{4}\b|' \
+                  r'\b[0-9a-fA-F]{12}\b'
+
+    # Replace all patterns
+    text = re.sub(ipv4_pattern, replacement, text)
+    text = re.sub(ipv6_pattern, replacement, text)
+    text = re.sub(mac_pattern, replacement, text)
+
+    return text
 
 
 def split_into_sentences(text: str, lang_code: str) -> List[str]:
@@ -219,8 +317,9 @@ def preprocess_text(text: str) -> str:
     text_to_analyse = replace_links_with_text(text_to_analyse, replacement="LINK")
     text_to_analyse = text_to_analyse.replace("\n ", " ")
     text_to_analyse = text_to_analyse.replace("-\n", "")
-    # text_to_analyse = text_to_analyse.replace("\n", " ")
     text_to_analyse = remove_multiple_dots(text_to_analyse)
+    text_to_analyse = filter_text(text_to_analyse)
+    text_to_analyse = re.sub(r'\s+', ' ', text_to_analyse).strip() #Replace all kinds of whitespace with a single space.
     return text_to_analyse
 
 POLISH_CHARS = r'[A-ząęóżźćńłśĄĘÓŹŻĆŃŁŚ]' # tu tylko testowałem czy są linie bez tekstu żadnego (były chyba nawet >10 charow jakie formułki matematyczne np.: "1/9  ≈ 0,(1), 0,077983 ≅ 0,1.")
