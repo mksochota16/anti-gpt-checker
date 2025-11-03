@@ -35,7 +35,6 @@
   feature_rank: 7
 - attribute_name: stylometrix_metrics.syntactic.SY_S_NOM
   type: human_written
-  type_direction: 1
   max_value: 1.0
   min_value: 0.0
   feature_rank: 8
@@ -156,7 +155,7 @@
   min_value: 0.0
   feature_rank: 31
 - attribute_name: stylometrix_metrics.syntactic.SY_S_DE
-  type: bidirectional
+  type: human_written
   max_value: 1.0
   min_value: 0.0
   feature_rank: 32
