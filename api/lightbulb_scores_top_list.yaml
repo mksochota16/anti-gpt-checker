@@ -7,3 +7,5 @@
 - text_errors_by_category.PUNCTUATION
 - stylometrix_metrics.inflection.IN_N_4ACC
 - average_word_char_length
+- stylometrix_metrics.inflection.IN_V_PAST
+- burstiness2
