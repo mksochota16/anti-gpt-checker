@@ -46,6 +46,8 @@ API_HISTOGRAMS_PATH = os.getenv("API_HISTOGRAMS_PATH")
 API_LIGHTBULBS_SCORES_CONFIG_PATH = os.getenv("API_LIGHTBULBS_SCORES_CONFIG_PATH")
 API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH = os.getenv("API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH")
 
+LLM_REFERENCE_MODEL = os.getenv("LLM_REFERENCE_MODEL", None)
+
 def load_lightbulbs_scores_parameters() -> dict[str, LightbulbScoreConfig]:
     path = Path(API_LIGHTBULBS_SCORES_CONFIG_PATH)
     with path.open("r", encoding="utf‑8") as f:

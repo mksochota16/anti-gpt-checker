@@ -69,7 +69,7 @@
   min_value: 0.0
   feature_rank: 14
 - attribute_name: number_of_errors
-  type: human_written
+  type: bidirectional
   type_direction: 1
   max_value: 0.12067492524562153
   min_value: 0.0
