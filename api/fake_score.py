@@ -1,3 +1,4 @@
+import pickle
 from typing import Optional
 
 from fastapi import Depends, APIRouter, HTTPException
@@ -59,11 +60,15 @@ def predict_attribute(attribute: AttributePLInDB) -> DocumentFakeScore:
     full_dict = attribute.to_flat_dict_normalized()
     filtered_dict = {key: value for key, value in full_dict.items() if key in API_FAKE_SCORE_FEATURES}
 
+
     loaded_model = CatBoostClassifier()
     loaded_model.load_model(API_CATBOOST_MODEL_PATH)
+    with open(API_CATBOOST_MODEL_PATH, "rb") as f:
+        vectorizer = pickle.load(f)
 
-    predicted_label = loaded_model.predict([filtered_dict])[0]
-    predicted_prob = loaded_model.predict_proba([filtered_dict])[:, 1][0] # 0-real, 1-generated
+    sample_features = vectorizer.transform([filtered_dict])
+    predicted_label = loaded_model.predict(sample_features)[0]
+    predicted_prob = loaded_model.predict_proba(sample_features)[0, 1] # 0-real, 1-generated
 
     fake_score = (predicted_prob - 0.5)*(-2) # -1-generated, 1-real
     return DocumentFakeScore(
