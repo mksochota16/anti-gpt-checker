@@ -63,7 +63,7 @@ def predict_attribute(attribute: AttributePLInDB) -> DocumentFakeScore:
 
     loaded_model = CatBoostClassifier()
     loaded_model.load_model(API_CATBOOST_MODEL_PATH)
-    with open(API_CATBOOST_MODEL_PATH, "rb") as f:
+    with open(API_CATBOOST_VECTORIZER, "rb") as f:
         vectorizer = pickle.load(f)
 
     sample_features = vectorizer.transform([filtered_dict])
