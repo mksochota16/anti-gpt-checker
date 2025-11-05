@@ -6,7 +6,7 @@ from starlette import status
 
 from api.api_models.document import DocumentInDB
 from api.server_config import API_ATTRIBUTES_COLLECTION_NAME, API_DEBUG, API_MONGODB_DB_NAME, API_FAKE_SCORE_FEATURES, \
-    API_CATBOOST_MODEL_PATH, API_DEBUG_USER_ID
+    API_CATBOOST_MODEL_PATH, API_DEBUG_USER_ID, API_CATBOOST_VECTORIZER
 from api.server_dao.analysis import DAOAsyncAnalysis
 from api.server_dao.document import DAOAsyncDocument
 from api.api_models.analysis import AnalysisInDB, AnalysisType, AnalysisStatus
