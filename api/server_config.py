@@ -45,6 +45,9 @@ API_HISTOGRAMS_PATH = os.getenv("API_HISTOGRAMS_PATH")
 
 API_LIGHTBULBS_SCORES_CONFIG_PATH = os.getenv("API_LIGHTBULBS_SCORES_CONFIG_PATH")
 API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH = os.getenv("API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH")
+API_FAKE_SCORE_FEATURES_CONFIG_PATH = os.getenv("API_FAKE_SCORE_FEATURES_CONFIG_PATH")
+
+API_CATBOOST_MODEL_PATH = os.getenv("API_CATBOOST_MODEL_PATH")
 
 LLM_REFERENCE_MODEL = os.getenv("LLM_REFERENCE_MODEL", None)
 
@@ -63,8 +66,8 @@ def load_lightbulbs_scores_parameters() -> dict[str, LightbulbScoreConfig]:
         print("Config file validation failed:\n", exc)
         raise
 
-def load_most_important_attribute_names():
-    path = Path(API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH)
+def load_attribute_names_list(filepath: str) -> List[str]:
+    path = Path(filepath)
     if path.suffix.lower() in {".yml", ".yaml"}:
         with path.open("r", encoding="utf-8") as handle:
             data = yaml.safe_load(handle) or []
@@ -81,7 +84,8 @@ def load_most_important_attribute_names():
         ]
 
 API_LIGHTBULBS_SCORES_PARAMETERS: dict[str, LightbulbScoreConfig] = load_lightbulbs_scores_parameters()
-API_MOST_IMPORTANT_ATTRIBUTES: List[str] = load_most_important_attribute_names()
+API_MOST_IMPORTANT_ATTRIBUTES: List[str] = load_attribute_names_list(API_MOST_IMPORTANT_ATTRIBUTES_CONFIG_PATH)
+API_FAKE_SCORE_FEATURES: List[str] = load_attribute_names_list(API_FAKE_SCORE_FEATURES_CONFIG_PATH)
 
 API_SHARED_SECRET_KEY = os.getenv("API_SHARED_SECRET_KEY")
 

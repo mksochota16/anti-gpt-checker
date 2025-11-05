@@ -1,5 +1,6 @@
 import hashlib
 import json
+from enum import Enum
 from typing import Union, List, Literal, Optional
 
 from pydantic import BaseModel
@@ -149,6 +150,15 @@ class ChunkLevelAnalysis(BaseModel):
     status: AnalysisStatus
     subanalyses: List[ChunkLevelSubanalysis]
 
+
+class PredictedLabel(str, Enum):
+    HUMAN_WRITTEN = "human_written" # score [-1,0]
+    LLM_GENERATED = "llm_generated" # score [0,1]
+
+class DocumentFakeScore(BaseModel):
+    predicted_label: PredictedLabel
+    fake_score: float # [-1,1]
+
 class DocumentDataWithAnalyses(BaseModel):
     document_hash: str  # the document hash
     document_status: DocumentStatus
@@ -157,6 +167,8 @@ class DocumentDataWithAnalyses(BaseModel):
 
     document_level_analysis: Optional[DocumentLevelAnalysis] = {}
     chunk_level_analyses: Optional[ChunkLevelAnalysis] = {}
+
+    document_fake_score: Optional[DocumentFakeScore] = None
 
 class UserDocumentsWithAnalyses(BaseModel):
     documents_with_analyses: List[DocumentDataWithAnalyses]
