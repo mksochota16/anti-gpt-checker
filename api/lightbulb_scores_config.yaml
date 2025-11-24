@@ -95,7 +95,7 @@
   min_value: 0.0
   feature_rank: 19
 - attribute_name: stylometrix_metrics.inflection.IN_V_1S
-  type: bidirectional
+  type: llm_generated
   max_value: 0.07707557778811851
   min_value: 0.0
   feature_rank: 20

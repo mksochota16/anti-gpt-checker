@@ -8,6 +8,7 @@ from pymongo import DESCENDING
 from starlette import status
 
 from api.api_models.document import DocumentInDB, DocumentStatus
+from api.fake_score import predict_attribute
 from api.server_config import API_ATTRIBUTES_COLLECTION_NAME, API_DEBUG, API_MONGODB_DB_NAME, API_HISTOGRAMS_PATH, \
     API_DEBUG_USER_ID, API_MOST_IMPORTANT_ATTRIBUTES
 from api.server_dao.analysis import DAOAsyncAnalysis
@@ -19,7 +20,7 @@ from api.api_models.response import BackgroundTaskStatusResponse, AnalysisResult
     HistogramDataDTO, DocumentDataWithAnalyses, DocumentLevelAnalysis, ChunkLevelAnalysis, ChunkLevelSubanalysis, \
     UserDocumentsWithAnalyses, DocumentLevelAnalysisAdditionalDetails, ChunkLevelAnalysisAdditionalDetails, \
     ChunkLevelSubanalysisAdditionalDetails, DocumentWithAnalysesAdditionalDetails, HistogramDataWithMetadata, \
-    AllHistogramsDTO, DocumentPreprocessingFailedResponse
+    AllHistogramsDTO, DocumentPreprocessingFailedResponse, DocumentFakeScore
 from api.analyser import compare_2_hists, compute_histogram_data, is_attribute_available_in_partial_attributes
 from api.security import verify_token
 from api.utils import _validate_analysis, _handle_analysis_status, calculate_lightbulb_scores, \
@@ -359,7 +360,8 @@ async def _get_document_with_analyses_overview(document_hash: str, user_id: str)
             chunk_level_analyses=ChunkLevelAnalysis(
                 status=highest_chunk_level_analysis_status,
                 subanalyses=[]
-            )
+            ),
+            document_fake_score=None
         )
 
     attribute: AttributePLInDB = await dao_attribute.find_by_id(newest_analyses.attributes_id)
@@ -428,11 +430,13 @@ async def _get_document_with_analyses_overview(document_hash: str, user_id: str)
             subanalyses=chunk_level_subanalyses
         )
 
+    document_fake_score: Optional[DocumentFakeScore] = predict_attribute(attribute) if attribute is not None else None
     return DocumentDataWithAnalyses(
         document_hash=document.document_hash,
         document_status=document.document_status,
         document_name=document.document_name,
         document_upload_date=document.created_at.isoformat(),
         document_level_analysis=document_level_analysis,
-        chunk_level_analyses=chunk_level_analysis
+        chunk_level_analyses=chunk_level_analysis,
+        document_fake_score=document_fake_score
     )

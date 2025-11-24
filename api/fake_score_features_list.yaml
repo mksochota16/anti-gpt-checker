@@ -1,6 +1,4 @@
-- stylometrix_metrics.syntactic.SY_S_NOM
 - number_of_errors
-- stylometrix_metrics.syntactic.SY_S_DE
 - standard_deviation_sentence_word_length
 - stylometrix_metrics.lexical.L_SYL_G4
 - stylometrix_metrics.inflection.IN_V_ACT
