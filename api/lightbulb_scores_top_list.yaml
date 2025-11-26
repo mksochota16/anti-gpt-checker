@@ -13,4 +13,3 @@
 - stylometrix_metrics.punctuation.PUNCT_TOTAL
 - combination_features.partial_attribute_statistics.perplexity.std_dev
 - stylometrix_metrics.grammatical_forms.G_ADJ
-- stylometrix_metrics.lexical.L_CONT_A
