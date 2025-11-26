@@ -2,7 +2,7 @@ import hashlib
 import json
 from typing import Optional, Tuple, List
 
-from fastapi import Depends, APIRouter, HTTPException, status, Query
+from fastapi import Depends, APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from pymongo import DESCENDING
 from starlette import status
@@ -10,14 +10,14 @@ from starlette import status
 from api.api_models.document import DocumentInDB, DocumentStatus
 from api.fake_score import predict_attribute
 from api.server_config import API_ATTRIBUTES_COLLECTION_NAME, API_DEBUG, API_MONGODB_DB_NAME, API_HISTOGRAMS_PATH, \
-    API_DEBUG_USER_ID, API_MOST_IMPORTANT_ATTRIBUTES
+    API_DEBUG_USER_ID, API_MOST_IMPORTANT_ATTRIBUTES, API_ADMIN_USER_ID
 from api.server_dao.analysis import DAOAsyncAnalysis
 from api.server_dao.document import DAOAsyncDocument
 from api.api_models.analysis import AnalysisInDB, AnalysisData, AnalysisType, AnalysisStatus
 from api.api_models.request import LightbulbScoreRequestData
 from api.api_models.response import BackgroundTaskStatusResponse, AnalysisResultsResponse, \
     LightbulbScoreResponse, DocumentPreprocessingStillRunningResponse, DocumentPreprocessingFinishedResponse, \
-    HistogramDataDTO, DocumentDataWithAnalyses, DocumentLevelAnalysis, ChunkLevelAnalysis, ChunkLevelSubanalysis, \
+    DocumentDataWithAnalyses, DocumentLevelAnalysis, ChunkLevelAnalysis, ChunkLevelSubanalysis, \
     UserDocumentsWithAnalyses, DocumentLevelAnalysisAdditionalDetails, ChunkLevelAnalysisAdditionalDetails, \
     ChunkLevelSubanalysisAdditionalDetails, DocumentWithAnalysesAdditionalDetails, HistogramDataWithMetadata, \
     AllHistogramsDTO, DocumentPreprocessingFailedResponse, DocumentFakeScore
@@ -266,7 +266,11 @@ async def get_document_with_analyses_overview(document_hash: str, user_id: str =
             response_model=UserDocumentsWithAnalyses,
             status_code=status.HTTP_200_OK)
 async def get_documents_with_analyses_overview(start_index: int = 0, limit: Optional[int] = None, user_id: str = Depends(verify_token) if not API_DEBUG else API_DEBUG_USER_ID):
-    document_hashes: List[str] = await dao_document.find_document_hash_by_query_paginated({'owner_id': user_id}, start_index, limit, sort={'updated_at': DESCENDING})
+    if user_id == API_ADMIN_USER_ID:
+        query = {}
+    else:
+        query = {'owner_id': user_id}
+    document_hashes: List[str] = await dao_document.find_document_hash_by_query_paginated(query, start_index, limit, sort={'updated_at': DESCENDING})
     documents_with_analyses: List[DocumentDataWithAnalyses] = []
     for document_hash in document_hashes:
         try:
@@ -290,7 +294,13 @@ async def get_documents_with_analyses_overview(start_index: int = 0, limit: Opti
             response_model=DocumentWithAnalysesAdditionalDetails,
             status_code=status.HTTP_200_OK)
 async def get_user_document_with_analyses_details(document_hash: str, user_id: str = Depends(verify_token) if not API_DEBUG else API_DEBUG_USER_ID):
-    document: DocumentInDB = await dao_document.find_one_by_query({'document_hash': document_hash, 'owner_id': user_id})
+    if user_id == API_ADMIN_USER_ID:
+        # we need just one of a document with a specified hash so just ignore user_id and continue
+        query = {'document_hash': document_hash}
+    else:
+        query = {'document_hash': document_hash, 'owner_id': user_id}
+    document: Optional[DocumentInDB] = await dao_document.find_one_by_query(query,
+                                                                  projections=['document_hash', 'document_status', 'document_name', 'created_at'])
     if not document:
         raise HTTPException(
             status_code=404,
@@ -325,7 +335,12 @@ async def get_user_document_with_analyses_details(document_hash: str, user_id: s
 
 
 async def _get_document_with_analyses_overview(document_hash: str, user_id: str):
-    document: DocumentInDB = await dao_document.find_one_by_query({'document_hash': document_hash, 'owner_id': user_id},
+    if user_id == API_ADMIN_USER_ID:
+        # we need just one of a document with a specified hash so just ignore user_id and continue
+        query = {'document_hash': document_hash}
+    else:
+        query = {'document_hash': document_hash, 'owner_id': user_id}
+    document: Optional[DocumentInDB] = await dao_document.find_one_by_query(query,
                                                                   projections=['document_hash', 'document_status', 'document_name', 'created_at'])
     if not document:
         raise HTTPException(
