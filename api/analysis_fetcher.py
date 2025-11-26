@@ -299,8 +299,7 @@ async def get_user_document_with_analyses_details(document_hash: str, user_id: s
         query = {'document_hash': document_hash}
     else:
         query = {'document_hash': document_hash, 'owner_id': user_id}
-    document: Optional[DocumentInDB] = await dao_document.find_one_by_query(query,
-                                                                  projections=['document_hash', 'document_status', 'document_name', 'created_at'])
+    document: Optional[DocumentInDB] = await dao_document.find_one_by_query(query)
     if not document:
         raise HTTPException(
             status_code=404,
