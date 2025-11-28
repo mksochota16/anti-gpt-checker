@@ -116,7 +116,7 @@ async def get_precompiled_lightbulb_scores(attribute: AttributePLInDB,
                                            attribute_names,
                                            is_chunk_attribute: bool = False,
                                            attribute_id: Optional[str] = None,
-                                           identifier: Optional[int] = None) -> Tuple[Optional[List[LightbulbScoreData]], List[str]]:
+                                           identifier: Optional[int] = None) -> Tuple[List[LightbulbScoreData], List[str]]:
     if not is_chunk_attribute:
         lightbulbs_in_db: Optional[LightbulbScoresInDB] = await dao_async_lightbulbs.find_one_by_query(
             {'attribute_id':attribute.id, 'is_chunk_attribute':is_chunk_attribute})
@@ -124,7 +124,7 @@ async def get_precompiled_lightbulb_scores(attribute: AttributePLInDB,
         lightbulbs_in_db: Optional[LightbulbScoresInDB] = await dao_async_lightbulbs.find_one_by_query(
             {'attribute_id': attribute_id, 'is_chunk_attribute': is_chunk_attribute, 'identifier': identifier})
     if lightbulbs_in_db is None:
-        return None, attribute_names
+        return [], attribute_names
 
     else:
         lightbulbs_to_return = []
