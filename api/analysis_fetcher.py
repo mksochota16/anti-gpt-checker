@@ -8,6 +8,7 @@ from pymongo import DESCENDING
 from starlette import status
 
 from api.api_models.document import DocumentInDB, DocumentStatus
+from api.api_models.lightbulb_score import LightbulbScores
 from api.fake_score import predict_attribute
 from api.server_config import API_ATTRIBUTES_COLLECTION_NAME, API_DEBUG, API_MONGODB_DB_NAME, API_HISTOGRAMS_PATH, \
     API_DEBUG_USER_ID, API_MOST_IMPORTANT_ATTRIBUTES, API_ADMIN_USER_ID
@@ -23,6 +24,7 @@ from api.api_models.response import BackgroundTaskStatusResponse, AnalysisResult
     AllHistogramsDTO, DocumentPreprocessingFailedResponse, DocumentFakeScore
 from api.analyser import compare_2_hists, compute_histogram_data, is_attribute_available_in_partial_attributes
 from api.security import verify_token
+from api.server_dao.lightbulb_score import DAOAsyncLightbulbScore
 from api.utils import _validate_analysis, _handle_analysis_status, calculate_lightbulb_scores, \
     get_precompiled_lightbulb_scores
 
@@ -332,7 +334,7 @@ async def get_user_document_with_analyses_details(document_hash: str, user_id: s
         chunk_level_analysis_details=chunk_level_analysis_details,
     )
 
-
+dao_async_lightbulb: DAOAsyncLightbulbScore = DAOAsyncLightbulbScore()
 async def _get_document_with_analyses_overview(document_hash: str, user_id: str):
     if user_id == API_ADMIN_USER_ID:
         # we need just one of a document with a specified hash so just ignore user_id and continue
@@ -395,6 +397,14 @@ async def _get_document_with_analyses_overview(document_hash: str, user_id: str)
         if not is_only_combination_features:
             lightbulb_features_left = calculate_lightbulb_scores(attribute, attributes_names_left)
             lightbulb_features += lightbulb_features_left
+            # some of the lightbulbs where not precalculated, we should update the cached lightbulbs in db
+            lightbulb_scores_model = LightbulbScores(attribute_id=attribute.id,
+                                                     lightbulb_scores_dict={lightbulb.attribute_name: lightbulb for
+                                                                            lightbulb in
+                                                                            lightbulb_features})
+            await dao_async_lightbulb.delete_one({'attribute_id': attribute.id, 'is_chunk_attribute': False})
+            await dao_async_lightbulb.insert_one(lightbulb_scores_model)
+
     document_level_analysis = DocumentLevelAnalysis(
         status=AnalysisStatus.FINISHED, # it has to be finished as we are fetching only finished analyses
         lightbulb_features= lightbulb_features
@@ -420,7 +430,7 @@ async def _get_document_with_analyses_overview(document_hash: str, user_id: str)
         if attribute.partial_attributes is not None:
             for chunk_attributes in attribute.partial_attributes:
                 identifier = chunk_attributes.index
-                lightbulb_features, attributes_names_left = await get_precompiled_lightbulb_scores(chunk_attributes.attribute,
+                chunk_lightbulb_features, attributes_names_left = await get_precompiled_lightbulb_scores(chunk_attributes.attribute,
                                                                                                    API_MOST_IMPORTANT_ATTRIBUTES,
                                                                                                    is_chunk_attribute=True,
                                                                                                    attribute_id=newest_analyses.attributes_id,
@@ -433,7 +443,17 @@ async def _get_document_with_analyses_overview(document_hash: str, user_id: str)
 
                     if not is_only_combination_features:
                         lightbulb_features_left = calculate_lightbulb_scores(attribute, attributes_names_left)
-                        lightbulb_features += lightbulb_features_left
+                        chunk_lightbulb_features += lightbulb_features_left
+                        # some of the lightbulbs where not precalculated, we should update the cached lightbulbs in db
+                        lightbulb_scores_model_partial = LightbulbScores(attribute_id=attribute.id,
+                                                                         is_chunk_attribute=True,
+                                                                         identifier=identifier,
+                                                                         lightbulb_scores_dict={
+                                                                             lightbulb.attribute_name: lightbulb for
+                                                                             lightbulb in chunk_lightbulb_features})
+                        await dao_async_lightbulb.delete_one(
+                            {'attribute_id': attribute.id, 'is_chunk_attribute': True})
+                        await dao_async_lightbulb.insert_one(lightbulb_scores_model_partial)
 
                 chunk_level_subanalyses.append(ChunkLevelSubanalysis(
                     identifier=identifier,
