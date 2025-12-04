@@ -1,0 +1,13 @@
+services:
+  anti-gpt-api:
+    container_name: anti-gpt-api
+    build: .
+    ports:
+      - "8989:8989"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./api/histograms:/app/api/histograms
+    env_file:
+      - .docker-env
+      - ./api/.docker-env
